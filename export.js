@@ -69,7 +69,7 @@ function parseObs(inputObs) {
   obs.valueModifier = inputObs.valueModifier;
   obs.valueCodedName = inputObs.valueCodedName;
   obs.voided = inputObs.voided;
-  if (inputObs.value) {
+  if (inputObs.value != null) {
     if (inputObs.value.uuid) {
       let tempValue = {};
       tempValue.uuid = inputObs.value.uuid;
