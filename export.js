@@ -1,4 +1,3 @@
-
 require('dotenv').config();
 const axios = require('axios');
 const fs = require('fs');
@@ -6,19 +5,12 @@ const path = require('path');
 const logger = require('./logger');
 
 
-// TODO: add to git (***don't include credential**)
-// TODO: break up into import and export script
-// TODO: componentize?
 
-// TODO: obviously need a better way to define this list
-const PATIENTS_TO_EXPORT = [
-  "06e23772-6480-44c4-855e-1e099ade2cd4",
-];
-
-// Replace with your OpenMRS credentials and context path
 const OPENMRS_CONTEXT_PATH = process.env.OPENMRS_SOURCE_CONTEXT_PATH;
-const OPENMRS_USERNAME = process.env.OPENMRS_SOURCE_USERNAME;
-const OPENMRS_PASSWORD = process.env.OPENMRS_SOURCE_PASSWORD;
+const AUTH = {
+  username: process.env.OPENMRS_SOURCE_USERNAME,
+  password: process.env.OPENMRS_SOURCE_PASSWORD,
+};
 const TARGET_DIRECTORY = process.env.TARGET_DIRECTORY
 
 // Define the OpenMRS URLs and representations
@@ -35,18 +27,18 @@ const CONSTANTS = {
   OBS_CUSTOM_REP: "v=custom:(uuid,concept:(uuid),person:(uuid),obsDatetime,location:(uuid),valueCoded:(uuid),valueDatetime,valueNumeric,valueText,valueComplex,encounter:(uuid),comment,valueModifier,valueCodedName:(uuid),obsGroup:(uuid),groupMembers:(uuid),voided)"
 };
 
+// TODO: obviously need a better way to define this list
+const PATIENTS_TO_EXPORT = [
+  "06e23772-6480-44c4-855e-1e099ade2cd4",
+];
+
 // Helper function to get data from OpenMRS API with Basic Authentication
 async function fetchData(url) {
   try {
-    const response = await axios.get(url, {
-      auth: {
-        username: OPENMRS_USERNAME,
-        password: OPENMRS_PASSWORD
-      }
-    });
+    const response = await axios.get(url, { auth: AUTH });
     return response.data;
   } catch (error) {
-    console.error("Error fetching data from OpenMRS: ", error);
+    logger.error("Error fetching data from OpenMRS: ", error);
     return null;
   }
 }
