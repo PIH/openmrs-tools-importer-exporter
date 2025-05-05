@@ -3,13 +3,12 @@ const fs = require('fs');
 const path = require('path');
 const axios = require('axios');
 const logger = require('./logger');
-//const { promisify } = require('util');
 const fsPromises = fs.promises;
 
 const OPENMRS_CONTEXT_PATH = process.env.OPENMRS_TARGET_CONTEXT_PATH;
 const AUTH = {
-  username: process.env.OPENMRS_SOURCE_USERNAME,
-  password: process.env.OPENMRS_SOURCE_PASSWORD,
+  username: process.env.OPENMRS_TARGET_USERNAME,
+  password: process.env.OPENMRS_TARGET_PASSWORD,
 };
 const TARGET_DIR = process.env.TARGET_DIRECTORY;
 const SUCCESS_DIR = path.join(TARGET_DIR, 'successful');
@@ -25,8 +24,13 @@ const URLS = {
 async function postIfNotExists(resourceUrl, data, uuid) {
   try {
     const getUrl = `${resourceUrl}/${uuid}`;
-    await axios.get(getUrl, { auth: AUTH });
-    logger.info(`Resource already exists: ${getUrl}`);
+    const response = await axios.get(getUrl, {auth: AUTH});
+    if (response.data?.uuid === uuid) {
+      logger.info(`Resource already exists: ${getUrl}`);
+    }
+    if (typeof response.data === 'string') {
+      throw new Error('Bad Response - Unauthenticated?');
+    }
   } catch (err) {
     if (err.response && err.response.status === 404) {
       await axios.post(resourceUrl, data, { auth: AUTH });
@@ -45,19 +49,24 @@ async function importPatientRecord(record) {
 
   for (const visit of record.visits) {
     try {
-      await axios.post(URLS.visit, visit, { auth: AUTH });
+      const response = await axios.post(URLS.visit, visit, { auth: AUTH });
+      if (typeof response.data === 'string') {
+        throw new Error('Bad Response - Unauthenticated?');
+      }
       logger.info(`Imported visit for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import visit: ${err.message}`);
+      throw err;
     }
   }
 
   for (const encounter of record.encounters) {
     try {
-      await axios.post(URLS.encounter, encounter, { auth: AUTH });
+      await postIfNotExists(URLS.encounter, encounter, encounter.uuid);
       logger.info(`Imported encounter ${encounter.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import encounter: ${err.message}`);
+      throw err;
     }
   }
 

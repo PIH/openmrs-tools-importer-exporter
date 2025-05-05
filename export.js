@@ -4,8 +4,7 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
 
-// TODO: log each record when exported, and, importantly, log any that are in error for quick parsing
-// TODO: break up into utility scripts, add support for other data objects?
+// TODO: break up into utility scripts, add support for other data objects
 
 const OPENMRS_CONTEXT_PATH = process.env.OPENMRS_SOURCE_CONTEXT_PATH;
 const AUTH = {
@@ -49,6 +48,9 @@ const PATIENTS_TO_EXPORT = loadPatientUuids(UUID_FILE_PATH);
 async function fetchData(url) {
   try {
     const response = await axios.get(url, { auth: AUTH });
+    if (typeof response.data === 'string') {
+      throw new Error('Bad Response - Unauthenticated?');
+    }
     return response.data;
   } catch (error) {
     logger.error("Error fetching data from OpenMRS: ", error);
@@ -137,6 +139,7 @@ async function exportAllPatients()  {
 
       // Save to file
       fs.writeFileSync(path.join(TARGET_DIRECTORY, filename), jsonData);
+      logger.info(`Patient data exported to ${filename}`);
     }
     logger.info('Patient data exported successfully');
   } catch (error) {
