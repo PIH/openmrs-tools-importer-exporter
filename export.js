@@ -4,13 +4,15 @@ const fs = require('fs');
 const path = require('path');
 const logger = require('./logger');
 
-
+// TODO: log each record when exported, and, importantly, log any that are in error for quick parsing
+// TODO: break up into utility scripts, add support for other data objects?
 
 const OPENMRS_CONTEXT_PATH = process.env.OPENMRS_SOURCE_CONTEXT_PATH;
 const AUTH = {
   username: process.env.OPENMRS_SOURCE_USERNAME,
   password: process.env.OPENMRS_SOURCE_PASSWORD,
 };
+const EXPORT_LIST_FILE = process.env.EXPORT_LIST_FILE
 const TARGET_DIRECTORY = process.env.TARGET_DIRECTORY
 
 // Define the OpenMRS URLs and representations
@@ -27,10 +29,21 @@ const CONSTANTS = {
   OBS_CUSTOM_REP: "v=custom:(uuid,concept:(uuid),person:(uuid),obsDatetime,location:(uuid),valueCoded:(uuid),valueDatetime,valueNumeric,valueText,valueComplex,encounter:(uuid),comment,valueModifier,valueCodedName:(uuid),obsGroup:(uuid),groupMembers:(uuid),voided)"
 };
 
-// TODO: obviously need a better way to define this list
-const PATIENTS_TO_EXPORT = [
-  "06e23772-6480-44c4-855e-1e099ade2cd4",
-];
+function loadPatientUuids(filePath) {
+  try {
+    const content = fs.readFileSync(filePath, 'utf8');
+    return content
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0 && !line.startsWith('#')); // remove empty lines or comments
+  } catch (err) {
+    console.error(`Failed to read UUIDs from file: ${err.message}`);
+    process.exit(1);
+  }
+}
+
+const UUID_FILE_PATH = path.join(EXPORT_LIST_FILE);
+const PATIENTS_TO_EXPORT = loadPatientUuids(UUID_FILE_PATH);
 
 // Helper function to get data from OpenMRS API with Basic Authentication
 async function fetchData(url) {
@@ -99,10 +112,6 @@ function parseEncounters(results) {
   });
   return encounters;
 }
-
-
-
-
 
 async function exportAllPatients()  {
 

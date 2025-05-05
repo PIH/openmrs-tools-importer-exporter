@@ -22,7 +22,7 @@ const URLS = {
 };
 
 // Try to GET a resource by UUID; if 404, POST it instead
-async function postIfNotExists(resourceUrl, data, uuid, removeUuidOnPost = false) {
+async function postIfNotExists(resourceUrl, data, uuid) {
   try {
     const getUrl = `${resourceUrl}/${uuid}`;
     await axios.get(getUrl, { auth: AUTH });
@@ -46,7 +46,7 @@ async function importPatientRecord(record) {
   for (const visit of record.visits) {
     try {
       await axios.post(URLS.visit, visit, { auth: AUTH });
-      logger.info(`Imported visit ${visit.uuid} for patient ${patient.uuid}`);
+      logger.info(`Imported visit for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import visit: ${err.message}`);
     }
@@ -54,7 +54,7 @@ async function importPatientRecord(record) {
 
   for (const encounter of record.encounters) {
     try {
-      await postIfNotExists(URLS.encounter, encounter, encounter.uuid, true);
+      await axios.post(URLS.encounter, encounter, { auth: AUTH });
       logger.info(`Imported encounter ${encounter.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import encounter: ${err.message}`);
