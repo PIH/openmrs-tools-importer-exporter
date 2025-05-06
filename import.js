@@ -26,9 +26,10 @@ async function postIfNotExists(resourceUrl, data, uuid) {
     const getUrl = `${resourceUrl}/${uuid}`;
     const response = await axios.get(getUrl, {auth: AUTH});
     if (response.data?.uuid === uuid) {
+      // our script, has currently written, does not overwrite objects that already exist (equality based on uuid)
       logger.info(`Resource already exists: ${getUrl}`);
     }
-    if (typeof response.data === 'string') {
+    if (typeof response?.data === 'string') {
       throw new Error('Bad Response - Unauthenticated?');
     }
   } catch (err) {
@@ -49,11 +50,8 @@ async function importPatientRecord(record) {
 
   for (const visit of record.visits) {
     try {
-      const response = await axios.post(URLS.visit, visit, { auth: AUTH });
-      if (typeof response.data === 'string') {
-        throw new Error('Bad Response - Unauthenticated?');
-      }
-      logger.info(`Imported visit for patient ${patient.uuid}`);
+      await postIfNotExists(URLS.visit, visit, visit.uuid);
+      logger.info(`Imported visit ${visit.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import visit: ${err.message}`);
       throw err;
