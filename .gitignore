@@ -1,5 +1,5 @@
 logs
 node_modules
 .idea
-.env
+src/.env
 

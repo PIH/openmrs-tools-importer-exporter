@@ -1,0 +1,90 @@
+import config from "../utils/config.js";
+import { fetchData } from "./openmrsService.js";
+
+// Define the OpenMRS URLs and representations
+const CONSTANTS = {
+  URLS: {
+    PATIENT: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/patient`,
+    VISIT: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/visit`,
+    ENCOUNTER: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/encounter`,
+    OBS: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/obs`,
+  },
+  PATIENT_CUSTOM_REP: "v=custom:(uuid,display,identifiers:(uuid,identifier,identifierType:(uuid),preferred),person:(uuid,display,gender,age,birthdate,birthdateEstimated,dead,deathDate,causeOfDeath,names,addresses,attributes))",
+  VISIT_CUSTOM_REP: "v=custom:(uuid,patient:(uuid),attributes,startDatetime,stopDatetime,indication,location:(uuid),visitType:(uuid),encounters:(uuid,patient:(uuid),location:(uuid),encounterType:(uuid),encounterDatetime,voided,voidReason),voided)",
+  ENCOUNTER_CUSTOM_REP: "v=custom:(uuid,patient:(uuid),location:(uuid),encounterType:(uuid),encounterDatetime,voided,obs:(uuid,concept:(uuid),person:(uuid),obsDatetime,location:(uuid),encounter:(uuid),comment,valueModifier,valueCodedName:(uuid),groupMembers:(uuid,person:(uuid),concept:(uuid),obsDatetime,value,valueCodedName:(uuid),voided),voided,value:(uuid)))",
+  OBS_CUSTOM_REP: "v=custom:(uuid,concept:(uuid),person:(uuid),obsDatetime,location:(uuid),valueCoded:(uuid),valueDatetime,valueNumeric,valueText,valueComplex,encounter:(uuid),comment,valueModifier,valueCodedName:(uuid),obsGroup:(uuid),groupMembers:(uuid),voided)"
+};
+
+export async function exportPatient(patientUuid) {
+  const patientUrl = `${CONSTANTS.URLS.PATIENT}/${patientUuid}?${CONSTANTS.PATIENT_CUSTOM_REP}`;
+  const visitsUrl = `${CONSTANTS.URLS.VISIT}?patient=${patientUuid}&${CONSTANTS.VISIT_CUSTOM_REP}`;
+  const encountersUrl = `${CONSTANTS.URLS.ENCOUNTER}?patient=${patientUuid}&s=default&${CONSTANTS.ENCOUNTER_CUSTOM_REP}`;
+  const [patientData, visitsData, encountersData] = await Promise.all([
+    fetchData(patientUrl),
+    fetchData(visitsUrl),
+    fetchData(encountersUrl),
+  ]);
+
+  return {
+    patient: patientData,
+    visits: visitsData ? visitsData.results : [],
+    encounters: parseEncounters(encountersData ? encountersData.results : [])
+  };
+
+}
+
+function parseObs(inputObs) {
+  let obs = {};
+  obs.uuid = inputObs.uuid;
+  obs.concept = inputObs.concept.uuid;
+  obs.person = inputObs.person;
+  obs.obsDatetime = inputObs.obsDatetime;
+  obs.location = inputObs.location;
+  obs.encounter = inputObs.encounter;
+  obs.comment = inputObs.comment;
+  obs.valueModifier = inputObs.valueModifier;
+  obs.valueCodedName = inputObs.valueCodedName;
+  obs.voided = inputObs.voided;
+  if (inputObs.value != null) {
+    if (inputObs.value.uuid) {
+      let tempValue = {};
+      tempValue.uuid = inputObs.value.uuid;
+      obs.value = tempValue;
+    } else {
+      obs.value = inputObs.value;
+    }
+  }
+  if (inputObs.groupMembers && inputObs.groupMembers.length > 0) {
+    let importedGroupMembers = [];
+    inputObs.groupMembers.forEach(expGroupMember => {
+      importedGroupMembers.push(parseObs(expGroupMember));
+    });
+    obs.groupMembers = importedGroupMembers;
+  }
+  return obs;
+}
+
+// Helper function to parse encounters
+function parseEncounters(results) {
+  let encounters = [];
+  results.forEach(result => {
+    let encounter = {};
+    encounter.uuid = result.uuid;
+    encounter.patient = result.patient;
+    if (result.location && result.location.uuid) {
+      encounter.location = result.location.uuid;
+    }
+    encounter.encounterType = result.encounterType;
+    encounter.encounterDatetime = result.encounterDatetime;
+    encounter.voided = result.voided;
+    if (result.obs && result.obs.length > 0) {
+      let obs = [];
+      result.obs.forEach(expObs => {
+        obs.push(parseObs(expObs));
+      });
+      encounter.obs = obs;
+    }
+    encounters.push(encounter);
+  });
+  return encounters;
+}
