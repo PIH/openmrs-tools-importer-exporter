@@ -15,7 +15,10 @@ export async function fetchData(url) {
     return response.data;
   } catch (error) {
     logger.error("Error fetching data from OpenMRS: ", error);
-    return null;
+    if (error.response?.data?.error?.detail) {
+      logger.error(error.response.data.error.detail);
+    }
+    throw error;
   }
 }
 
