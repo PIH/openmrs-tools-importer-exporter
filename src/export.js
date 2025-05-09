@@ -18,7 +18,7 @@ async function exportAllPatients() {
       const exportPromises = batch.map(async (patientUuid) => {
         try {
           const patientRecord = await exportPatient(patientUuid);
-          const jsonData = JSON.stringify([patientRecord], null, 4);
+          const jsonData = JSON.stringify(patientRecord, null, 4);
           const filename = `${patientUuid}_patient.json`;
 
           // Save to file

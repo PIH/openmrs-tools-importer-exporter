@@ -37,26 +37,15 @@ async function processFile(file) {
   const filePath = path.join(TARGET_DIR, file);
   try {
     const content = await fs.readFile(filePath, 'utf8');
-    const patientRecords = JSON.parse(content);
+    const patientRecord = JSON.parse(content);
 
-    // Import all patient records in the file
-    const importPromises = patientRecords.map(record =>
-      importPatient(record)
-        .then(() => logger.info(`Successfully imported patient from file ${file}`))
-        .catch(err => {
-          logger.error(`Failed to import patient from file ${file}: ${err.message}`);
-          throw err; // If one record fails, it will be caught in the outer `try` block
-        })
-    );
-
-    // Wait for all patient imports to complete
-    await Promise.all(importPromises);
-
+    // Import record
+    await importPatient(patientRecord)
+    logger.info(`Successfully imported patient from file ${file}`);
     // Move the file to the "successful" directory
     await moveFile(filePath, SUCCESS_DIR);
     logger.info(`File ${file} successfully processed and moved to ${SUCCESS_DIR}`);
   } catch (err) {
-    // Handle file-level errors (e.g., JSON parse failures or import failures)
     logger.error(`Error processing file ${file}: ${err.message}`);
     await moveFile(filePath, FAILED_DIR);
     logger.info(`File ${file} moved to ${FAILED_DIR} due to errors.`);
