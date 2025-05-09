@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 import config from './utils/config.js';
 import logger from './utils/logger.js';
@@ -9,69 +9,67 @@ const TARGET_DIR = config.TARGET_DIR;
 const SUCCESS_DIR = path.join(TARGET_DIR, 'successful');
 const FAILED_DIR = path.join(TARGET_DIR, 'failed');
 
-function importAllPatients() {
-  // Read the directory asynchronously
-  fs.readdir(TARGET_DIR, (err, files) => {
-    if (err) {
-      logger.error(`Failed to read the directory: ${err.message}`);
-      return;
+// Define a batch size
+const BATCH_SIZE = 100;
+
+async function importAllPatients() {
+  try {
+    // Read all files in the target directory
+    const files = (await fs.readdir(TARGET_DIR)).filter(f => f.endsWith('_patient.json'));
+
+    // Divide files into chunks/batches
+    const fileBatches = chunkArray(files, BATCH_SIZE);
+
+    // Process each batch sequentially
+    for (const batch of fileBatches) {
+      logger.info(`Processing a batch of ${batch.length} files.`);
+      await Promise.all(batch.map(async file => processFile(file)));
     }
 
-    // Filter only patient JSON files
-    const patientFiles = files.filter(file => file.endsWith('_patient.json'));
-
-    patientFiles.forEach(file => {
-      const filePath = path.join(TARGET_DIR, file);
-
-      // Read the file asynchronously
-      fs.readFile(filePath, 'utf8', (err, content) => {
-        if (err) {
-          logger.error(`Failed to read file ${file}: ${err.message}`);
-          // Move file to "failed" directory
-          return moveFile(filePath, FAILED_DIR, moveErr => {
-            if (moveErr) {
-              logger.error(`Failed to move file ${file} to failed directory: ${moveErr.message}`);
-            }
-          });
-        }
-
-        // Parse JSON content of the file
-        let patientRecord;
-        try {
-          patientRecord = JSON.parse(content)[0];  // TODO: remove the export from nesting everything in an array?
-        } catch (parseErr) {
-          logger.error(`Failed to parse JSON in file ${file}: ${parseErr.message}`);
-          // Move file to "failed" directory
-          return moveFile(filePath, FAILED_DIR, moveErr => {
-            if (moveErr) {
-              logger.error(`Failed to move file ${file} to failed directory: ${moveErr.message}`);
-            }
-          });
-        }
-
-        // Process each patient record
-        handlePatientRecord(patientRecord, filePath, file);
-      });
-    });
-  });
+    logger.info(`All files processed successfully.`);
+  } catch (err) {
+    logger.error(`Error during processing: ${err.message}`);
+  }
 }
 
-// Function to handle processing patient records
-async function handlePatientRecord(patientRecord, filePath, fileName) {
+// Helper function to process a single file
+async function processFile(file) {
+  const filePath = path.join(TARGET_DIR, file);
+  try {
+    const content = await fs.readFile(filePath, 'utf8');
+    const patientRecords = JSON.parse(content);
 
-  importPatient(patientRecord)
-  .then(
-    () => {
-      logger.info(`Successfully imported patient record from file ${fileName}`);
-      moveFile(filePath, SUCCESS_DIR);
-    }
-  )
-  .catch(
-    err => {
-      logger.error(`Failed to import patient record from file ${fileName}: ${err.message}`);
-      moveFile(filePath, FAILED_DIR);
-    }
-  )
+    // Import all patient records in the file
+    const importPromises = patientRecords.map(record =>
+      importPatient(record)
+        .then(() => logger.info(`Successfully imported patient from file ${file}`))
+        .catch(err => {
+          logger.error(`Failed to import patient from file ${file}: ${err.message}`);
+          throw err; // If one record fails, it will be caught in the outer `try` block
+        })
+    );
+
+    // Wait for all patient imports to complete
+    await Promise.all(importPromises);
+
+    // Move the file to the "successful" directory
+    await moveFile(filePath, SUCCESS_DIR);
+    logger.info(`File ${file} successfully processed and moved to ${SUCCESS_DIR}`);
+  } catch (err) {
+    // Handle file-level errors (e.g., JSON parse failures or import failures)
+    logger.error(`Error processing file ${file}: ${err.message}`);
+    await moveFile(filePath, FAILED_DIR);
+    logger.info(`File ${file} moved to ${FAILED_DIR} due to errors.`);
+  }
 }
 
-importAllPatients();
+// Helper function to chunk an array into smaller batches
+function chunkArray(array, size) {
+  const chunks = [];
+  for (let i = 0; i < array.length; i += size) {
+    chunks.push(array.slice(i, i + size));
+  }
+  return chunks;
+}
+
+importAllPatients().catch(err => logger.error(`Fatal error: ${err.message}`));
