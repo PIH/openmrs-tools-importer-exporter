@@ -10,7 +10,7 @@ const SUCCESS_DIR = path.join(TARGET_DIR, 'successful');
 const FAILED_DIR = path.join(TARGET_DIR, 'failed');
 
 // Define a batch size
-const BATCH_SIZE = 100;
+const BATCH_SIZE = 20;
 
 async function importAllPatients() {
   try {

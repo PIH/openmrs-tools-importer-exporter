@@ -1,4 +1,4 @@
-import { postDataIfNotExists} from "./openmrsService.js";
+import { postDataIfNotExists } from "./openmrsService.js";
 import logger from "../utils/logger.js";
 import config from "../utils/config.js";
 
@@ -21,8 +21,6 @@ export async function importPatient(record) {
     }
     throw err;
   }
-
-
 
   for (const visit of record.visits) {
     try {
