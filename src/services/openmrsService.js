@@ -3,11 +3,11 @@ import logger from '../utils/logger.js';
 import config from '../utils/config.js';
 
 // Helper function to get data from OpenMRS API with Basic Authentication
-export async function fetchData(url) {
+export async function fetchData(url, server = 'SOURCE') {
   try {
     const response = await axios.get(url, { auth: {
-        username: config.OPENMRS_SOURCE_USERNAME,
-        password: config.OPENMRS_SOURCE_PASSWORD,
+        username: server === 'TARGET' ? config.OPENMRS_TARGET_USERNAME : config.OPENMRS_SOURCE_USERNAME,
+        password: server === 'TARGET' ? config.OPENMRS_TARGET_PASSWORD : config.OPENMRS_SOURCE_PASSWORD,
       }});
     if (typeof response.data === 'string') {
       throw new Error('Bad Response - Unauthenticated?');

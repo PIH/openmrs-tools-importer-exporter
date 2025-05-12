@@ -13,6 +13,8 @@
     "axios": "^1.9.0",
     "dotenv": "^16.5.0",
     "fs": "^0.0.1-security",
+    "json-diff": "^1.0.6",
+    "lodash": "^4.17.21",
     "winston": "^3.17.0"
   }
 }
