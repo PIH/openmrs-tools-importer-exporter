@@ -40,7 +40,9 @@ const sanitizeObject = (obj) => {
       .map(sanitizeObject); // Recursively sanitize elements in arrays
   } else if (typeof obj === "object" && obj !== null) {
     return Object.entries(obj).reduce((acc, [key, value]) => {
-      acc[key] = sanitizeObject(value); // Recursively sanitize each field in the object
+      if (value !== undefined) { // drop any undefined properties
+        acc[key] = sanitizeObject(value); // Recursively sanitize each field in the object
+      }
       return acc;
     }, {});
   } else if (typeof obj === "string") {
