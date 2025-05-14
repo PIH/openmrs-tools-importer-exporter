@@ -46,8 +46,8 @@ const sanitizeObject = (obj) => {
       return acc;
     }, {});
   } else if (typeof obj === "string") {
-    // Trim strings and collapse whitespace
-    return obj.trim().replace(/\s+/g, " ");
+    // Trim strings, collapse whitespace, and standardize greater than and less than
+    return obj.trim().replace(/\s+/g, " ").replace("<","&lt;").replace(">","&gt;");
   }
   return obj; // Return non-object, non-string values as-is
 };
