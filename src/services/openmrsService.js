@@ -1,6 +1,7 @@
 import axios from 'axios';
 import logger from '../utils/logger.js';
 import config from '../utils/config.js';
+import CONSTANTS from '../utils/constants.js';
 
 // Helper function to get data from OpenMRS API with Basic Authentication
 export async function fetchData(url, server = 'SOURCE') {
@@ -49,4 +50,17 @@ export async function postDataIfNotExists(resourceUrl, data, uuid) {
       throw err;
     }
   }
+}
+
+export async function setGlobalProperty(propertyName, propertyValue, server = 'TARGET') {
+  await axios.post(`${server === 'TARGET' ? CONSTANTS.TARGET.URLS.GLOBAL_PROPERTY : CONSTANTS.SOURCE.URL.GLOBAL_PROPERTY}/${propertyName}`, {
+    value: propertyValue,
+  }, { auth: {
+      username: server === 'TARGET' ? config.OPENMRS_TARGET_USERNAME : config.OPENMRS_SOURCE_USERNAME,
+      password: server === 'TARGET' ? config.OPENMRS_TARGET_PASSWORD : config.OPENMRS_SOURCE_PASSWORD,
+    } });
+}
+
+export async function getGlobalProperty(propertyName, server = 'TARGET') {
+  return fetchData(`${server === 'TARGET' ? CONSTANTS.TARGET.URLS.GLOBAL_PROPERTY : CONSTANTS.SOURCE.URL.GLOBAL_PROPERTY}/${propertyName}`, server);
 }

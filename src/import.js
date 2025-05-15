@@ -4,6 +4,8 @@ import config from './utils/config.js';
 import logger from './utils/logger.js';
 import { importPatient } from './services/importerService.js';
 import { moveFile } from './services/fileService.js';
+import { getGlobalProperty, setGlobalProperty } from "./services/openmrsService.js";
+import Constants from "./utils/constants.js";
 
 const TARGET_DIR = config.TARGET_DIR;
 const SUCCESS_DIR = path.join(TARGET_DIR, 'successful');
@@ -13,6 +15,18 @@ const FAILED_DIR = path.join(TARGET_DIR, 'failed');
 const BATCH_SIZE = 20;
 
 async function importAllPatients() {
+  try {
+    // disable the visit assignment handler so that we don't manipulate encounters when saving
+    await setGlobalProperty(Constants.GP_VISIT_ASSIGNMENT_HANDLER_DISABLED, true, 'TARGET');
+    const globalProperty = await getGlobalProperty(Constants.GP_VISIT_ASSIGNMENT_HANDLER_DISABLED, 'TARGET');
+    if (globalProperty.value !== 'true') {
+      throw new Error();
+    }
+  }
+  catch (err) {
+    throw new Error('Failed to disable the visit assignment handler: ' + err.message);
+  }
+
   try {
     // Read all files in the target directory
     const files = (await fs.readdir(TARGET_DIR)).filter(f => f.endsWith('_patient.json'));
@@ -29,6 +43,18 @@ async function importAllPatients() {
     logger.info(`All files processed.`);
   } catch (err) {
     logger.error(`Error during processing: ${err.message}`);
+  }
+
+  try {
+    // re-enable the visit assignment handler
+    await setGlobalProperty(Constants.GP_VISIT_ASSIGNMENT_HANDLER_DISABLED, false, 'TARGET');
+    const globalProperty = await getGlobalProperty(Constants.GP_VISIT_ASSIGNMENT_HANDLER_DISABLED, 'TARGET');
+    if (globalProperty.value !== 'false') {
+      throw new Error();
+    }
+  }
+  catch (err) {
+    throw new Error('Failed to re-enable the visit assignment handler: ' + err.message);
   }
 }
 
