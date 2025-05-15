@@ -63,6 +63,9 @@ function parseEncounters(results) {
     }
     encounter.encounterType = result.encounterType;
     encounter.encounterDatetime = result.encounterDatetime;
+    if (result.visit && result.visit.uuid) {
+      encounter.visit = result.visit.uuid;
+    }
     encounter.voided = result.voided;
     if (result.obs && result.obs.length > 0) {
       let obs = [];

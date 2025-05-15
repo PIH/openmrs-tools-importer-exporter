@@ -26,7 +26,7 @@ async function importAllPatients() {
       await Promise.all(batch.map(async file => processFile(file)));
     }
 
-    logger.info(`All files processed successfully.`);
+    logger.info(`All files processed.`);
   } catch (err) {
     logger.error(`Error during processing: ${err.message}`);
   }
