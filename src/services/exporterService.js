@@ -1,6 +1,17 @@
 import CONSTANTS from "../utils/constants.js";
-import { fetchData } from "./openmrsService.js";
+import {fetchData} from "./openmrsService.js";
 
+export async function exportUser(userUuid, server = 'SOURCE') {
+  const userUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.USER : CONSTANTS.SOURCE.URLS.USER}/${userUuid}?${CONSTANTS.USER_CUSTOM_REP}`;
+  const user = await fetchData(userUrl, server);
+  return parseUser(user);
+}
+
+function parseUser(inputUser) {
+  let user = inputUser;
+  // TODO currently no processing required, remove this function entirely if not needed
+  return user;
+}
 
 export async function exportPatient(patientUuid, server = 'SOURCE') {
   const patientUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PATIENT : CONSTANTS.SOURCE.URLS.PATIENT}/${patientUuid}?${CONSTANTS.PATIENT_CUSTOM_REP}`;

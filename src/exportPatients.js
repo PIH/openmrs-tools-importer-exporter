@@ -3,10 +3,10 @@ import path from 'path';
 import config from './utils/config.js';
 import logger from './utils/logger.js';
 import { exportPatient } from "./services/exporterService.js";
-import { loadPatientUuidsFromFile } from './services/fileService.js'
+import { loadUuidsFromFile } from './services/fileService.js'
 
-const UUID_FILE_PATH = path.join(config.EXPORT_LIST_FILE);
-const patientsToExport = loadPatientUuidsFromFile(UUID_FILE_PATH);
+const UUID_FILE_PATH = path.join(config.EXPORT_PATIENT_LIST_FILE);
+const patientsToExport = loadUuidsFromFile(UUID_FILE_PATH);
 
 // Define a batch size
 const BATCH_SIZE = 20;

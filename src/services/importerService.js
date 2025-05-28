@@ -1,6 +1,42 @@
 import { postDataIfNotExists } from "./openmrsService.js";
 import logger from "../utils/logger.js";
 import CONSTANTS from "../utils/constants.js";
+import {generateStrongPassword} from "../utils/utils.js";
+
+const alreadyInUseRegex = /Username \S+ or system id \S+ is already in use/;
+
+export async function importUser(user) {
+
+  if (user.username === 'daemon') {
+    logger.info(`Skipping user ${user.uuid} because it is the daemon user`);
+    return;
+  }
+
+  if (user.username === 'admin') {
+    logger.info(`Skipping user ${user.uuid} because it is the admin user`);
+    return;
+  }
+
+  logger.info(`Importing user ${user.uuid}`);
+
+  // add a random password to the user (we are not copying over passwords, but users require passwords)
+  user.password = generateStrongPassword(32);
+
+  try {
+    await postDataIfNotExists(CONSTANTS.TARGET.URLS.USER, user, user.uuid);
+  } catch (err) {
+    if (err.response?.data?.error?.message && alreadyInUseRegex.test(err.response?.data?.error?.message)) {
+      logger.info(`Skipping user ${user.username} because username already in use`);
+      return;
+    }
+
+    logger.error(`Failed to import user: ${err.message}`);
+    if (err.response?.data?.error?.detail) {
+      logger.error(err.response.data.error.detail);
+    }
+    throw err;
+  }
+}
 
 export async function importPatient(record) {
   const patient = record.patient;
@@ -41,6 +77,4 @@ export async function importPatient(record) {
       throw err;
     }
   }
-
-  logger.info(`Finished importing patient ${patient.uuid}`);
 }

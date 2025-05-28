@@ -4,7 +4,7 @@ import logger from "../utils/logger.js";
 
 const fsPromises = fs.promises;
 
-export function loadPatientUuidsFromFile(filePath) {
+export function loadUuidsFromFile(filePath) {
   try {
     const content = fs.readFileSync(filePath, 'utf8');
     return content
@@ -40,7 +40,6 @@ export async function moveFile(filePath, destinationDir) {
     await fsPromises.mkdir(destinationDir, { recursive: true });
 
     await fsPromises.rename(filePath, destinationPath);
-    logger.info(`Moved file to ${destinationDir}: ${filePath}`);
   } catch (err) {
     logger.error(`Failed to move file: ${err.message}`);
   }

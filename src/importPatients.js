@@ -67,10 +67,10 @@ async function processFile(file) {
 
     // Import record
     await importPatient(patientRecord)
-    logger.info(`Successfully imported patient from file ${file}`);
+    logger.info(`Successfully processed patient from file ${file}`);
     // Move the file to the "successful" directory
     await moveFile(filePath, SUCCESS_DIR);
-    logger.info(`File ${file} successfully processed and moved to ${SUCCESS_DIR}`);
+    logger.info(`File ${file} successfully moved to ${SUCCESS_DIR}`);
   } catch (err) {
     logger.error(`Error processing file ${file}: ${err.message}`);
     await moveFile(filePath, FAILED_DIR);
