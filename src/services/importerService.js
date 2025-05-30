@@ -38,6 +38,26 @@ export async function importUser(user) {
   }
 }
 
+export async function importProvider(provider) {
+
+  if (provider.identifier === "UNKNOWN") {
+    logger.info(`Skipping provider ${provider.uuid} because it is the UNKNOWN provider`);
+    return;
+  }
+
+  logger.info(`Importing provider ${provider.uuid}`);
+
+  try {
+    await postDataIfNotExists(CONSTANTS.TARGET.URLS.PROVIDER, provider, provider.uuid);
+  } catch (err) {
+    logger.error(`Failed to import provider: ${err.message}`);
+    if (err.response?.data?.error?.detail) {
+      logger.error(err.response.data.error.detail);
+    }
+    throw err;
+  }
+}
+
 export async function importPatient(record) {
   const patient = record.patient;
   logger.info(`Importing patient ${patient.uuid}`);

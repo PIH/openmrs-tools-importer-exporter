@@ -14,13 +14,14 @@ const BATCH_SIZE = 20;
 
 /**
  * This script (currently) work as follows:
- *    - it loads all files in the target direct in the format ${uuid}_user.json and processes each file:
+ *    - it loads all files in the target directory in the format ${uuid}_user.json and processes each file:
  *      - if the username is "admin" or "daemon", it skips that file and moves it to the "successful" directory
  *      - otherwise, it searches for an existing user with the same uuid in the target system
  *        - if an existing user is found, it does not import, and the moves file to "successful" directory
  *      - otherwise, it a creates new, random password for this user, and attempts to post the user to the target system
  *        - if successful, it moves the file to "successful" directory (note that a new system-id will be generated)
  *        - if failed, and error message contains "Username admin or system id admin is already in use", it skips and moves the user to "successful"
+ *        - otherwise, move to the "failed" directory
  *
  *  Future features
  *    - retire users -- we likely want to retire all migrated users, which we can either do as part of the export generation, or here

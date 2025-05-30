@@ -12,6 +12,7 @@ const config = {
   TARGET_DIR: process.env.TARGET_DIR,
   EXPORT_PATIENT_LIST_FILE: process.env.EXPORT_PATIENT_LIST_FILE,
   EXPORT_USER_LIST_FILE: process.env.EXPORT_USER_LIST_FILE,
+  EXPORT_PROVIDER_LIST_FILE: process.env.EXPORT_PROVIDER_LIST_FILE,
 }
 
 export default config;

@@ -24,7 +24,7 @@ const BATCH_SIZE = 20;
  */
 async function exportAllUsers() {
   try {
-    // Function to process a single batch of patient UUIDs
+    // Function to process a single batch of user UUIDs
     const processBatch = async (batch) => {
       const exportPromises = batch.map(async (userUuid) => {
         try {

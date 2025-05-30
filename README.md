@@ -13,13 +13,17 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
 
 `npm install`
 
-`node exportPatients.js` 
+`node exportUsers.js`
+`node importUsers.js`
 
-`node importPatients.js`
+`node exportProviders.js`
+`node importProviders.js`
 
-`node exportUsers.js` 
+`node exportPatients.js
+`node importPatients.js
+`
 
-`node importUsers.js` 
+
 
 
 
