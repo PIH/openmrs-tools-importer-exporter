@@ -46,7 +46,7 @@ function parseObs(inputObs) {
     }
   }
   else {
-    delete obs['value'];  // REST doesn't like when you try to import an obs with an explicitly null value (ie obs group)
+    delete obs['value'];  // REST web services doesn't like when you try to import an obs with an explicitly null value (ie obs group), we should ticket and fix
   }
   if (inputObs.groupMembers && inputObs.groupMembers.length > 0) {
     let importedGroupMembers = [];
@@ -55,7 +55,7 @@ function parseObs(inputObs) {
     });
     obs.groupMembers = importedGroupMembers;
   } else {
-    obs.groupMembers = [];
+    obs.groupMembers = [];  // REST web services is not null safe on group members, we should ticket and fix
   }
   return obs;
 }
