@@ -37,25 +37,16 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
 }
 
 function parseObs(inputObs) {
-  let obs = {};
-  obs.uuid = inputObs.uuid;
-  obs.concept = inputObs.concept.uuid;
-  obs.person = inputObs.person;
-  obs.obsDatetime = inputObs.obsDatetime;
-  obs.location = inputObs.location;
-  obs.encounter = inputObs.encounter;
-  obs.comment = inputObs.comment;
-  obs.valueModifier = inputObs.valueModifier;
-  obs.valueCodedName = inputObs.valueCodedName;
-  obs.voided = inputObs.voided;
+  let obs = inputObs;
   if (inputObs.value != null) {
     if (inputObs.value.uuid) {
-      let tempValue = {};
-      tempValue.uuid = inputObs.value.uuid;
-      obs.value = tempValue;
+      obs.value = inputObs.value.uuid;
     } else {
       obs.value = inputObs.value;
     }
+  }
+  else {
+    delete obs['value'];  // REST doesn't like when you try to import an obs with an explicitly null value (ie obs group)
   }
   if (inputObs.groupMembers && inputObs.groupMembers.length > 0) {
     let importedGroupMembers = [];
@@ -63,6 +54,8 @@ function parseObs(inputObs) {
       importedGroupMembers.push(parseObs(expGroupMember));
     });
     obs.groupMembers = importedGroupMembers;
+  } else {
+    obs.groupMembers = [];
   }
   return obs;
 }
@@ -71,18 +64,7 @@ function parseObs(inputObs) {
 function parseEncounters(results) {
   let encounters = [];
   results.forEach(result => {
-    let encounter = {};
-    encounter.uuid = result.uuid;
-    encounter.patient = result.patient;
-    if (result.location && result.location.uuid) {
-      encounter.location = result.location.uuid;
-    }
-    encounter.encounterType = result.encounterType;
-    encounter.encounterDatetime = result.encounterDatetime;
-    if (result.visit && result.visit.uuid) {
-      encounter.visit = result.visit.uuid;
-    }
-    encounter.voided = result.voided;
+    let encounter = result;
     if (result.obs && result.obs.length > 0) {
       let obs = [];
       result.obs.forEach(expObs => {

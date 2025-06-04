@@ -10,7 +10,8 @@ const SUCCESS_DIR = path.join(TARGET_DIR, 'successful');
 const FAILED_DIR = path.join(TARGET_DIR, 'failed');
 
 // Define a batch size
-const BATCH_SIZE = 20;
+// set to 1, see: https://pihemr.atlassian.net/browse/UHM-8661
+const BATCH_SIZE = 1;
 
 /**
  * This script (currently) work as follows:

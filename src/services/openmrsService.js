@@ -41,11 +41,16 @@ export async function postDataIfNotExists(resourceUrl, data, uuid) {
     }
   } catch (err) {
     if (err.response && err.response.status === 404) {
-      await axios.post(resourceUrl, data, { auth: {
+      const response = await axios.post(resourceUrl, data, { auth: {
           username: config.OPENMRS_TARGET_USERNAME,
           password: config.OPENMRS_TARGET_PASSWORD,
         } });
-      logger.info(`Created new resource at ${resourceUrl}`);
+      if (response.status !== 201) {
+        throw new Error(`Failed to create resource at ${resourceUrl}, status code: ${response.status}`);
+      }
+      else {
+        logger.info(`Created new resource at ${resourceUrl}`);
+      }
     } else {
       throw err;
     }
