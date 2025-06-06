@@ -22,6 +22,7 @@ export default {
       OBS: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/obs`,
       USER: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/user`,
       PROVIDER: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/providermanagement/provider`,
+      PROGRAM_ENROLLMENT: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/programenrollment`,
       GLOBAL_PROPERTY: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/systemsetting`,
     }
   },
@@ -33,6 +34,7 @@ export default {
       OBS: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/obs`,
       USER: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/user`,
       PROVIDER: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/providermanagement/provider`,
+      PROGRAM_ENROLLMENT: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/programenrollment`,
       GLOBAL_PROPERTY: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/systemsetting`,
     }
   },
@@ -41,5 +43,6 @@ export default {
   ENCOUNTER_CUSTOM_REP: `v=custom:(uuid,patient:(uuid),location:(uuid),encounterType:(uuid),form:(uuid),visit:(uuid),encounterDatetime,encounterProviders:(provider:(uuid),encounterRole:(uuid)),obs:${OBS_REP})`,
   USER_CUSTOM_REP: `v=custom:(uuid,username,email,userProperties,roles:(uuid),person:${PERSON_REP})`,
   PROVIDER_CUSTOM_REP: `v=custom:(uuid,identifier,providerRole:(uuid),person:${PERSON_REP})`,
+  PROGRAM_ENROLLMENT_CUSTOM_REP: `v=custom:(uuid,patient:(uuid),program:(uuid),location:(uuid),dateEnrolled,dateCompleted,outcome:(uuid),states:(uuid,startDate,endDate,dateCreated,state:(uuid)))`,
   GP_VISIT_ASSIGNMENT_HANDLER_DISABLED: "emrapi.emrApiVisitAssignmentHandler.disabled"
 };

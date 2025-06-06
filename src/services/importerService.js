@@ -97,4 +97,17 @@ export async function importPatient(record) {
       throw err;
     }
   }
+
+  for (const programEnrollment of record.programEnrollments) {
+    try {
+      await postDataIfNotExists(CONSTANTS.TARGET.URLS.PROGRAM_ENROLLMENT, programEnrollment, programEnrollment.uuid);
+      logger.info(`Imported program enrollment ${programEnrollment.uuid} for patient ${patient.uuid}`);
+    } catch (err) {
+      logger.error(`Failed to import program enrollment: ${err.message}`);
+      if (err.response?.data?.error?.detail) {
+        logger.error(err.response.data.error.detail);
+      }
+      throw err;
+    }
+  }
 }
