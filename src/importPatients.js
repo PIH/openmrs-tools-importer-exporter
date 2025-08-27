@@ -3,13 +3,17 @@ import path from 'path';
 import config from './utils/config.js';
 import logger from './utils/logger.js';
 import { importPatient } from './services/importerService.js';
-import { moveFile } from './services/fileService.js';
+import {loadMappingFile, moveFile} from './services/fileService.js';
 import { getGlobalProperty, setGlobalProperty } from "./services/openmrsService.js";
 import Constants from "./utils/constants.js";
+import {replaceMappings} from "./utils/utils.js";
 
 const TARGET_DIR = config.TARGET_DIR;
 const SUCCESS_DIR = path.join(TARGET_DIR, 'successful');
 const FAILED_DIR = path.join(TARGET_DIR, 'failed');
+
+const PROVIDER_MAPPINGS_FILE_PATH = path.join(config.EXPORT_PROVIDER_MAPPINGS_FILE);
+const providerMappings = PROVIDER_MAPPINGS_FILE_PATH ? loadMappingFile(PROVIDER_MAPPINGS_FILE_PATH) : [];
 
 // Define a batch size
 const BATCH_SIZE = 20;
@@ -63,7 +67,10 @@ async function processFile(file) {
   const filePath = path.join(TARGET_DIR, file);
   try {
     const content = await fs.readFile(filePath, 'utf8');
-    const patientRecord = JSON.parse(content);
+    // replace any provider mappings
+    const updatedContent = replaceMappings(content, providerMappings);
+    // TOD replace any user mappings
+    const patientRecord = JSON.parse(updatedContent);
 
     // Import record
     await importPatient(patientRecord)

@@ -1,11 +1,15 @@
 import path from "path";
 import fs from "fs/promises"; // Use the promise-based fs API
-import { loadPatientUuidsFromDir } from "./services/fileService.js";
+import {loadMappingFile, loadPatientUuidsFromDir} from "./services/fileService.js";
 import { exportPatient } from "./services/exporterService.js";
 import logger from './utils/logger.js';
 import config from './utils/config.js';
 import _ from "lodash"; // Import Lodash for deep object comparison
-import { diffString } from "json-diff"; // A library to show differences between two JSON objects
+import { diffString } from "json-diff";
+import {replaceMappings} from "./utils/utils.js";
+
+const PROVIDER_MAPPINGS_FILE_PATH = path.join(config.EXPORT_PROVIDER_MAPPINGS_FILE);
+const providerMappings = PROVIDER_MAPPINGS_FILE_PATH ? loadMappingFile(PROVIDER_MAPPINGS_FILE_PATH) : [];
 
 // Define a batch size
 const BATCH_SIZE = 20;
@@ -34,6 +38,9 @@ const sanitizeObject = (obj) => {
       .sort((a, b) => {
         if (a.uuid && b.uuid) {
           return a.uuid.localeCompare(b.uuid); // Sort by "uuid" if both objects have it
+        }
+        if (a.encounterRole && b.encounterRole) {
+          return a.encounterRole.uuid.localeCompare(b.encounterRole.uuid)  // sort encounter providers by encounter role
         }
         return 0; // No sorting if "uuid" property is missing
       })
@@ -79,7 +86,7 @@ async function verifyPatients() {
           }
 
           const fileContents = await fs.readFile(patientFilePath, 'utf-8');
-          const parsedFileContents = JSON.parse(fileContents);
+          const parsedFileContents = JSON.parse(replaceMappings(fileContents, providerMappings));
 
           // Sanitize both objects (remove whitespace and normalize structure)
           const sanitizedPatientRecord = sanitizeObject(patientRecord);

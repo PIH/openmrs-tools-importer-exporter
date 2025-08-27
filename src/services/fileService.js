@@ -17,6 +17,38 @@ export function loadUuidsFromFile(filePath) {
   }
 }
 
+// Function to convert CSV file to key-value pairs
+export function loadMappingFile(filePath) {
+  try {
+    // Read the file content
+    const content = fs.readFileSync(filePath, 'utf8');
+
+    // Split content by lines and remove any extraneous whitespace or empty lines
+    const lines = content
+      .split('\n')
+      .map(line => line.trim())
+      .filter(line => line.length > 0);
+
+    // Process each line into key-value pairs (assume first column is key, second is value)
+    const keyValuePairs = {};
+    lines.forEach((line) => {
+      const [rawKey, rawValue] = line.split(',').map(part => part.trim());
+
+      if (rawKey && rawValue !== undefined) {
+        // Discard anything after the first space in the key and value
+        const key = rawKey.split(' ')[0];
+        const value = rawValue.split(' ')[0];
+        keyValuePairs[key] = value;
+      }
+    });
+
+    return keyValuePairs;
+  } catch (err) {
+    console.error(`Error processing CSV file: ${err.message}`);
+    return null;
+  }
+}
+
 export function loadPatientUuidsFromDir(directory) {
   const files = fs.readdirSync(directory);
   const uuids = [];

@@ -3,30 +3,33 @@ import path from 'path';
 import config from './utils/config.js';
 import logger from './utils/logger.js';
 import { importUser } from './services/importerService.js';
-import { moveFile } from './services/fileService.js';
+import {loadMappingFile, moveFile} from './services/fileService.js';
 
 const TARGET_DIR = config.TARGET_DIR;
 const SUCCESS_DIR = path.join(TARGET_DIR, 'successful');
 const FAILED_DIR = path.join(TARGET_DIR, 'failed');
+const MAPPED_TO_EXISTING_DIR = path.join(TARGET_DIR, 'mapped_to_existing');
 
+const USER_MAPPINGS_FILE_PATH = path.join(config.EXPORT_USER_MAPPINGS_FILE);
+const userMappings = USER_MAPPINGS_FILE_PATH ? loadMappingFile(USER_MAPPINGS_FILE_PATH) : [];
 // Define a batch size
-const BATCH_SIZE = 20;
+// since there are a limited number of users, just use batch of size 1 (I noticed a problem with higher batch sizes)
+const BATCH_SIZE = 1;
 
 /**
- * This script (currently) work as follows:
+ * This script works as follows:
+ *    - it loads any "user mapping" file that may exist
  *    - it loads all files in the target directory in the format ${uuid}_user.json and processes each file:
- *      - if the username is "admin" or "daemon", it skips that file and moves it to the "successful" directory
+ *      - if the uuid is in the user mapping files, it skips that file and moves it to the "mapped_to_existing" directory
  *      - otherwise, it searches for an existing user with the same uuid in the target system
  *        - if an existing user is found, it does not import, and the moves file to "successful" directory
  *      - otherwise, it a creates new, random password for this user, and attempts to post the user to the target system
  *        - if successful, it moves the file to "successful" directory (note that a new system-id will be generated)
- *        - if failed, and error message contains "Username admin or system id admin is already in use", it skips and moves the user to "successful"
+ *        - if failed, and error message contains "Username admin or system id admin is already in use", it skips and moves the user to "already_exists"
  *        - otherwise, move to the "failed" directory
  *
  *  Future features
- *    - retire users -- we likely want to retire all migrated users, which we can either do as part of the export generation, or here
- *    - duplicate usernames -- instead of skipping duplicate usernames, we can come up with a protocol for modifying the username (ie, "${username}-${siteName}" and import the user; this becomes critical if we start to import audit information
- *    - providers - we need to import the provider associated with the user and coordinate that
+ *    - retire users -- do we want to retire all migrated users?
  *    - verify - do we want/need to create a verify script for users?
  *
  *  Intended use case
@@ -62,6 +65,12 @@ async function processFile(file) {
     const content = await fs.readFile(filePath, 'utf8');
     const user = JSON.parse(content);
 
+    if (user.uuid in userMappings) {
+      logger.info(`User ${user.uuid} in mapping file, skipping`)
+      await moveFile(filePath, MAPPED_TO_EXISTING_DIR);
+      logger.info(`File ${file} successfully moved to ${MAPPED_TO_EXISTING_DIR}`);
+      return;
+    }
     // Import record
     await importUser(user)
     logger.info(`Successfully processed user from file ${file}`);

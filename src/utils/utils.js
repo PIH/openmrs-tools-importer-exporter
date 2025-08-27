@@ -30,3 +30,12 @@ export function generateStrongPassword(length = 16) {
   // Shuffle the password to randomize character positions
   return passwordArray.sort(() => Math.random() - 0.5).join('');
 }
+
+export function replaceMappings(str, mappings) {
+  let updatedStr = str;
+  for (const [targetValue, newValue] of Object.entries(mappings)) {
+    updatedStr = updatedStr.replace(new RegExp(targetValue, "g"), newValue);
+  }
+  return updatedStr;
+}
+
