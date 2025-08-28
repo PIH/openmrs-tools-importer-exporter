@@ -26,7 +26,7 @@ const BATCH_SIZE = 1;
  *    - it loads all files in the target directory in the format ${uuid}_provider.json and processes each file:
  *      - if the uuid is in the provider mapping files, it skips that file and moves it to the "mapped_to_existing" directory
  *      - otherwise, it searches for an existing provider with the same uuid in the target system
- *        - if an existing user is found, it does not import, and the moves file to "success" directory
+ *        - if an existing provider is found, it does not import, and the moves file to "successful" directory
  *      - otherwise, it attempts to post the providers to the target system
  *        - if successful, it moves the file to "successful" directory
  *        - if failed, moves it to the "failed" directory
