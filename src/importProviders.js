@@ -3,28 +3,36 @@ import path from 'path';
 import config from './utils/config.js';
 import logger from './utils/logger.js';
 import {importProvider} from './services/importerService.js';
-import { moveFile } from './services/fileService.js';
+import {loadMappingFile, moveFile} from './services/fileService.js';
 
 const TARGET_DIR = config.TARGET_DIR;
 const SUCCESS_DIR = path.join(TARGET_DIR, 'successful');
 const FAILED_DIR = path.join(TARGET_DIR, 'failed');
+const MAPPED_TO_EXISTING_DIR = path.join(TARGET_DIR, 'mapped_to_existing');
+
+const PROVIDER_MAPPINGS_FILE_PATH = path.join(config.EXPORT_PROVIDER_MAPPINGS_FILE);
+const providerMappings = PROVIDER_MAPPINGS_FILE_PATH ? loadMappingFile(PROVIDER_MAPPINGS_FILE_PATH) : [];
 
 // Define a batch size
 // set to 1, see: https://pihemr.atlassian.net/browse/UHM-8661
 const BATCH_SIZE = 1;
 
+
+// TODO: add audit data and user substitution
+
 /**
- * This script (currently) work as follows:
+ * This script works as follows:
+ *    - it loads any "provider mapping" file that may exist
  *    - it loads all files in the target directory in the format ${uuid}_provider.json and processes each file:
- *      - if the provider identifier is "UNKNOWN", it skips that file and moves it to the "successful" directory
+ *      - if the uuid is in the provider mapping files, it skips that file and moves it to the "mapped_to_existing" directory
  *      - otherwise, it searches for an existing provider with the same uuid in the target system
  *        - if an existing provider is found, it does not import, and the moves file to "successful" directory
  *      - otherwise, it attempts to post the providers to the target system
- *        - if successful, it moves the file to "successful" directory (note that a new system-id will be generated)
+ *        - if successful, it moves the file to "successful" directory
  *        - if failed, moves it to the "failed" directory
  *
+
  *  Future features?
- *    - retire providers -- we likely want to retire all migrated providers, which we can either do as part of the export generation, or here
  *    - duplicate provider identifiers -- this script does not do any checking/handling of duplicate provider identifiers;
  *      from a quick look at the ProviderValidator it *looks* like there is no checking for duplicate identifier, but
  *      we should confirm, and also confirm what we use provider identifiers for (I *think* it is only for interaction with the PACS system)
@@ -59,6 +67,13 @@ async function processFile(file) {
   try {
     const content = await fs.readFile(filePath, 'utf8');
     const provider = JSON.parse(content);
+
+    if (provider.uuid in providerMappings) {
+      logger.info(`Provider ${provider.uuid} in mapping file, skipping`)
+      await moveFile(filePath, MAPPED_TO_EXISTING_DIR);
+      logger.info(`File ${file} successfully moved to ${MAPPED_TO_EXISTING_DIR}`);
+      return;
+    }
 
     // Import record
     await importProvider(provider)
