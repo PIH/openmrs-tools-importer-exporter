@@ -4,6 +4,7 @@ import config from './utils/config.js';
 import logger from './utils/logger.js';
 import { importUser } from './services/importerService.js';
 import {loadMappingFile, moveFile} from './services/fileService.js';
+import {replaceMappings} from "./utils/utils.js";
 
 const TARGET_DIR = config.TARGET_DIR;
 const SUCCESS_DIR = path.join(TARGET_DIR, 'successful');
@@ -63,14 +64,19 @@ async function processFile(file) {
   const filePath = path.join(TARGET_DIR, file);
   try {
     const content = await fs.readFile(filePath, 'utf8');
-    const user = JSON.parse(content);
+    const uuid = JSON.parse(content).uuid; // just grab the uuid, inefficient, but we parse this file twice because we need to check the uuid against the mapping list before substituting
 
-    if (user.uuid in userMappings) {
-      logger.info(`User ${user.uuid} in mapping file, skipping`)
+    if (uuid in userMappings) {
+      logger.info(`User ${uuid} in mapping file, skipping`)
       await moveFile(filePath, MAPPED_TO_EXISTING_DIR);
       logger.info(`File ${file} successfully moved to ${MAPPED_TO_EXISTING_DIR}`);
       return;
     }
+
+    // replace any user mappings before import
+    const updatedContent = replaceMappings(content,userMappings);
+    const user = JSON.parse(updatedContent);
+
     // Import record
     await importUser(user)
     logger.info(`Successfully processed user from file ${file}`);

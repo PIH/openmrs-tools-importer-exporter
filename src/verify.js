@@ -8,6 +8,9 @@ import _ from "lodash"; // Import Lodash for deep object comparison
 import { diffString } from "json-diff";
 import {replaceMappings} from "./utils/utils.js";
 
+const USER_MAPPINGS_FILE_PATH = path.join(config.EXPORT_USER_MAPPINGS_FILE);
+const userMappings = USER_MAPPINGS_FILE_PATH ? loadMappingFile(USER_MAPPINGS_FILE_PATH) : [];
+
 const PROVIDER_MAPPINGS_FILE_PATH = path.join(config.EXPORT_PROVIDER_MAPPINGS_FILE);
 const providerMappings = PROVIDER_MAPPINGS_FILE_PATH ? loadMappingFile(PROVIDER_MAPPINGS_FILE_PATH) : [];
 
@@ -86,7 +89,7 @@ async function verifyPatients() {
           }
 
           const fileContents = await fs.readFile(patientFilePath, 'utf-8');
-          const parsedFileContents = JSON.parse(replaceMappings(fileContents, providerMappings));
+          const parsedFileContents = JSON.parse(replaceMappings(replaceMappings(fileContents, providerMappings),userMappings));
 
           // Sanitize both objects (remove whitespace and normalize structure)
           const sanitizedPatientRecord = sanitizeObject(patientRecord);

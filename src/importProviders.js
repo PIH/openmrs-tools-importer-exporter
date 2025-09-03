@@ -4,11 +4,15 @@ import config from './utils/config.js';
 import logger from './utils/logger.js';
 import {importProvider} from './services/importerService.js';
 import {loadMappingFile, moveFile} from './services/fileService.js';
+import {replaceMappings} from "./utils/utils.js";
 
 const TARGET_DIR = config.TARGET_DIR;
 const SUCCESS_DIR = path.join(TARGET_DIR, 'successful');
 const FAILED_DIR = path.join(TARGET_DIR, 'failed');
 const MAPPED_TO_EXISTING_DIR = path.join(TARGET_DIR, 'mapped_to_existing');
+
+const USER_MAPPINGS_FILE_PATH = path.join(config.EXPORT_USER_MAPPINGS_FILE);
+const userMappings = USER_MAPPINGS_FILE_PATH ? loadMappingFile(USER_MAPPINGS_FILE_PATH) : [];
 
 const PROVIDER_MAPPINGS_FILE_PATH = path.join(config.EXPORT_PROVIDER_MAPPINGS_FILE);
 const providerMappings = PROVIDER_MAPPINGS_FILE_PATH ? loadMappingFile(PROVIDER_MAPPINGS_FILE_PATH) : [];
@@ -16,9 +20,6 @@ const providerMappings = PROVIDER_MAPPINGS_FILE_PATH ? loadMappingFile(PROVIDER_
 // Define a batch size
 // set to 1, see: https://pihemr.atlassian.net/browse/UHM-8661
 const BATCH_SIZE = 1;
-
-
-// TODO: add audit data and user substitution
 
 /**
  * This script works as follows:
@@ -66,14 +67,19 @@ async function processFile(file) {
   const filePath = path.join(TARGET_DIR, file);
   try {
     const content = await fs.readFile(filePath, 'utf8');
-    const provider = JSON.parse(content);
+    const uuid = JSON.parse(content).uuid; // just grab the uuid, inefficient, but we parse this file twice because we need to check the uuid against the mapping list before substituting
 
-    if (provider.uuid in providerMappings) {
-      logger.info(`Provider ${provider.uuid} in mapping file, skipping`)
+
+    if (uuid in providerMappings) {
+      logger.info(`Provider ${uuid} in mapping file, skipping`)
       await moveFile(filePath, MAPPED_TO_EXISTING_DIR);
       logger.info(`File ${file} successfully moved to ${MAPPED_TO_EXISTING_DIR}`);
       return;
     }
+
+    // replace any user mappings before import
+    const updatedContent = replaceMappings(content,userMappings);
+    const provider = JSON.parse(updatedContent);
 
     // Import record
     await importProvider(provider)
