@@ -50,6 +50,8 @@ export async function importPatient(record) {
   // include the person date created and person creator on the patient as that is the way the REST module processes it
   patient.personDateCreated = patient.person?.dateCreated;
   patient.personCreator = patient.person?.creator;
+  patient.personDateChanged = patient.person?.dateChanged;
+  patient.personChangedBy = patient.person?.changedBy;
 
   try {
     await postDataIfNotExists(CONSTANTS.TARGET.URLS.PATIENT, patient, patient.uuid);
