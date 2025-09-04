@@ -47,6 +47,10 @@ export async function importPatient(record) {
   const patient = record.patient;
   logger.info(`Importing patient ${patient.uuid}`);
 
+  // include the person date created and person creator on the patient as that is the way the REST module processes it
+  patient.personDateCreated = patient.person?.dateCreated;
+  patient.personCreator = patient.person?.creator;
+
   try {
     await postDataIfNotExists(CONSTANTS.TARGET.URLS.PATIENT, patient, patient.uuid);
   } catch (err) {

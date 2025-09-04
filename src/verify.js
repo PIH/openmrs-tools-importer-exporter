@@ -51,6 +51,12 @@ const sanitizeObject = (obj) => {
   } else if (typeof obj === "object" && obj !== null) {
     return Object.entries(obj).reduce((acc, [key, value]) => {
       if (value !== undefined) { // drop any undefined properties
+
+        // hack: remove seconds and milliseconds component of date created to ignore issue where the patient date created is a second different from what was expected
+        if (key === "dateCreated") {
+          value = value.replace(/\d{2}\.\d{3}/g, '');
+        }
+
         acc[key] = sanitizeObject(value); // Recursively sanitize each field in the object
       }
       return acc;
