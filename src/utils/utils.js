@@ -39,3 +39,10 @@ export function replaceMappings(str, mappings) {
   return updatedStr;
 }
 
+export function trimNonAlphanumeric(str) {
+    if ( str ) {
+        return str.replace(/(^[^a-zA-Z0-9]*)|([^a-zA-Z0-9]*$)/g, '');
+    }
+    return str;
+}
+
