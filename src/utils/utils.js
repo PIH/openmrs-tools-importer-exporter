@@ -46,3 +46,38 @@ export function trimNonAlphanumeric(str) {
     return str;
 }
 
+// Utility to recursively sanitize JSON objects
+// - Removes unnecessary whitespace from strings
+// - Provides consistent structure for comparison purposes
+export function sanitizeObject(obj)  {
+  if (Array.isArray(obj)) {
+    return obj
+      .sort((a, b) => {
+        if (a.uuid && b.uuid) {
+          return a.uuid.localeCompare(b.uuid); // Sort by "uuid" if both objects have it
+        }
+        if (a.encounterRole && b.encounterRole) {
+          return a.encounterRole.uuid.localeCompare(b.encounterRole.uuid)  // sort encounter providers by encounter role
+        }
+        return 0; // No sorting if "uuid" property is missing
+      })
+      .map(sanitizeObject); // Recursively sanitize elements in arrays
+  } else if (typeof obj === "object" && obj !== null) {
+    return Object.entries(obj).reduce((acc, [key, value]) => {
+      if (value !== undefined) { // drop any undefined properties
+
+        // hack: remove seconds and milliseconds component of date created to ignore issue where the patient date created is a second different from what was expected
+        if (key === "dateCreated") {
+          value = value.replace(/\d{2}\.\d{3}/g, '');
+        }
+
+        acc[key] = sanitizeObject(value); // Recursively sanitize each field in the object
+      }
+      return acc;
+    }, {});
+  } else if (typeof obj === "string") {
+    // Trim strings, collapse whitespace, and standardize greater than and less than
+    return obj.trim().replace(/\s+/g, " ").replace("<","&lt;").replace(">","&gt;");
+  }
+  return obj; // Return non-object, non-string values as-is
+}

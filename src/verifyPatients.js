@@ -6,7 +6,7 @@ import logger from './utils/logger.js';
 import config from './utils/config.js';
 import _ from "lodash"; // Import Lodash for deep object comparison
 import { diffString } from "json-diff";
-import {replaceMappings} from "./utils/utils.js";
+import {replaceMappings,sanitizeObject} from "./utils/utils.js";
 
 const USER_MAPPINGS_FILE_PATH = path.join(config.EXPORT_USER_MAPPINGS_FILE);
 const userMappings = USER_MAPPINGS_FILE_PATH ? loadMappingFile(USER_MAPPINGS_FILE_PATH) : [];
@@ -31,42 +31,6 @@ async function ensureDirectories() {
     logger.error('Failed to create necessary directories:', error);
   }
 }
-
-// Utility to recursively sanitize JSON objects
-// - Removes unnecessary whitespace from strings
-// - Provides consistent structure for comparison purposes
-const sanitizeObject = (obj) => {
-  if (Array.isArray(obj)) {
-    return obj
-      .sort((a, b) => {
-        if (a.uuid && b.uuid) {
-          return a.uuid.localeCompare(b.uuid); // Sort by "uuid" if both objects have it
-        }
-        if (a.encounterRole && b.encounterRole) {
-          return a.encounterRole.uuid.localeCompare(b.encounterRole.uuid)  // sort encounter providers by encounter role
-        }
-        return 0; // No sorting if "uuid" property is missing
-      })
-      .map(sanitizeObject); // Recursively sanitize elements in arrays
-  } else if (typeof obj === "object" && obj !== null) {
-    return Object.entries(obj).reduce((acc, [key, value]) => {
-      if (value !== undefined) { // drop any undefined properties
-
-        // hack: remove seconds and milliseconds component of date created to ignore issue where the patient date created is a second different from what was expected
-        if (key === "dateCreated") {
-          value = value.replace(/\d{2}\.\d{3}/g, '');
-        }
-
-        acc[key] = sanitizeObject(value); // Recursively sanitize each field in the object
-      }
-      return acc;
-    }, {});
-  } else if (typeof obj === "string") {
-    // Trim strings, collapse whitespace, and standardize greater than and less than
-    return obj.trim().replace(/\s+/g, " ").replace("<","&lt;").replace(">","&gt;");
-  }
-  return obj; // Return non-object, non-string values as-is
-};
 
 // Load UUIDs from the "successful" directory
 const uuids = loadPatientUuidsFromDir(SUCCESS_DIR);

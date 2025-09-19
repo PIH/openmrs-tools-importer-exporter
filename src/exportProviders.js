@@ -46,7 +46,7 @@ async function exportAllProviders() {
       await Promise.all(exportPromises);
     };
 
-    // Split patients into batches and process each batch
+    // Split providers into batches and process each batch
     for (let i = 0; i < providersToExport.length; i += BATCH_SIZE) {
       const batch = providersToExport.slice(i, i + BATCH_SIZE);
       logger.info(`Processing batch: ${i / BATCH_SIZE + 1}`);

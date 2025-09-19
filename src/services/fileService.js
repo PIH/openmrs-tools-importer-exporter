@@ -63,6 +63,20 @@ export function loadPatientUuidsFromDir(directory) {
   return uuids;
 }
 
+export function loadRelationshipUuidsFromDir(directory) {
+  const files = fs.readdirSync(directory);
+  const uuids = [];
+
+  files.forEach((file) => {
+    const match = file.match(/^(.+)_relationship.json$/);
+    if (match && match[1]) {
+      uuids.push(match[1]);
+    }
+  });
+
+  return uuids;
+}
+
 export async function moveFile(filePath, destinationDir) {
   try {
     const fileName = path.basename(filePath);

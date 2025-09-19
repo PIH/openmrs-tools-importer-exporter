@@ -18,6 +18,11 @@ export async function exportProvider(providerUuid, server = 'SOURCE') {
   return await fetchData(providerUrl, server);
 }
 
+export async function exportRelationship(relationshipUuid, server = 'SOURCE') {
+  const relationshipUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.RELATIONSHIP : CONSTANTS.SOURCE.URLS.RELATIONSHIP}/${relationshipUuid}?${CONSTANTS.RELATIONSHIP_CUSTOM_REP}`;
+  return await fetchData(relationshipUrl, server);
+}
+
 export async function exportPatient(patientUuid, server = 'SOURCE') {
   const patientUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PATIENT : CONSTANTS.SOURCE.URLS.PATIENT}/${patientUuid}?${CONSTANTS.PATIENT_CUSTOM_REP}`;
   const visitsUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.VISIT : CONSTANTS.SOURCE.URLS.VISIT}?patient=${patientUuid}&${CONSTANTS.VISIT_CUSTOM_REP}`;

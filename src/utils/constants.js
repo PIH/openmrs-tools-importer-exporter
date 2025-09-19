@@ -23,6 +23,7 @@ export default {
       USER: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/user`,
       PROVIDER: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/providermanagement/provider`,
       PROGRAM_ENROLLMENT: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/programenrollment`,
+      RELATIONSHIP: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/relationship`,
       GLOBAL_PROPERTY: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/systemsetting`,
     }
   },
@@ -35,6 +36,7 @@ export default {
       USER: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/user`,
       PROVIDER: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/providermanagement/provider`,
       PROGRAM_ENROLLMENT: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/programenrollment`,
+      RELATIONSHIP: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/relationship`,
       GLOBAL_PROPERTY: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/systemsetting`,
     }
   },
@@ -45,5 +47,6 @@ export default {
   PROVIDER_CUSTOM_REP: `v=custom:(uuid,identifier,providerRole:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),person:${PERSON_REP})`,
   PROGRAM_ENROLLMENT_CUSTOM_REP: `v=custom:(uuid,patient:(uuid),program:(uuid),location:(uuid),dateEnrolled,dateCompleted,outcome:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),states:(uuid,startDate,endDate,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),state:(uuid)))`,
   ALLERGY_CUSTOM_REP: `v=custom:(uuid,allergen:(allergenType,codedAllergen:(uuid),nonCodedAllergen),severity:(uuid),comment,reactions:(reaction:(uuid),reactionNonCoded),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid))`,
+  RELATIONSHIP_CUSTOM_REP: `v=custom:(uuid,personA:(uuid),personB:(uuid),relationshipType:(uuid),startDate,endDate,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid))`,
   GP_VISIT_ASSIGNMENT_HANDLER_DISABLED: "emrapi.emrApiVisitAssignmentHandler.disabled"
 };

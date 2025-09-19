@@ -8,6 +8,7 @@ OPENMRS_TARGET_PASSWORD=test123
 EXPORT_PATIENT_LIST_FILE=/tmp/patient-uuids.csv
 EXPORT_USER_LIST_FILE=/tmp/user-uuids.csv
 EXPORT_PROVIDER_LIST_FILE=/tmp/providers-uuids.csv
+EXPORT_RELATIONSHIP_LIST_FILE=/tmp/relationship-uuids.csv
 EXPORT_USER_MAPPINGS_FILE=/tmp/user-mappings.csv
 EXPORT_PROVIDER_MAPPINGS_FILE=/tmp/provider-mappings.csv
 TARGET_DIR=/tmp
