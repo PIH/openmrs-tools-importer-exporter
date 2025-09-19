@@ -23,18 +23,21 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
   const visitsUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.VISIT : CONSTANTS.SOURCE.URLS.VISIT}?patient=${patientUuid}&${CONSTANTS.VISIT_CUSTOM_REP}`;
   const encountersUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.ENCOUNTER : CONSTANTS.SOURCE.URLS.ENCOUNTER}?patient=${patientUuid}&s=default&${CONSTANTS.ENCOUNTER_CUSTOM_REP}`;
   const patientProgramsUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PROGRAM_ENROLLMENT : CONSTANTS.SOURCE.URLS.PROGRAM_ENROLLMENT}?patient=${patientUuid}&voided=false&${CONSTANTS.PROGRAM_ENROLLMENT_CUSTOM_REP}`;
-  const [patientData, visitsData, encountersData, patientProgramsData] = await Promise.all([
+  const allergiesUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PATIENT : CONSTANTS.SOURCE.URLS.PATIENT}/${patientUuid}/allergy?${CONSTANTS.ALLERGY_CUSTOM_REP}`;
+  const [patientData, visitsData, encountersData, patientProgramsData, allergiesData] = await Promise.all([
     fetchData(patientUrl, server),
     fetchData(visitsUrl, server),
     fetchData(encountersUrl, server),
-    fetchData(patientProgramsUrl, server)
+    fetchData(patientProgramsUrl, server),
+    fetchData(allergiesUrl, server)
   ]);
 
   return {
     patient: patientData,
     visits: visitsData ? visitsData.results : [],
     encounters: parseEncounters(encountersData ? encountersData.results : []),
-    programEnrollments: patientProgramsData ? patientProgramsData.results : []
+    programEnrollments: patientProgramsData ? patientProgramsData.results : [],
+    allergies: allergiesData ? allergiesData.results : []
   };
 
 }

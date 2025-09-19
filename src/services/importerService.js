@@ -101,4 +101,17 @@ export async function importPatient(record) {
       throw err;
     }
   }
+
+  for (const allergy of record.allergies) {
+    try {
+      await postDataIfNotExists(`${CONSTANTS.TARGET.URLS.PATIENT}/${patient.uuid}/allergy`, allergy, allergy.uuid);
+      logger.info(`Imported allergy ${allergy.uuid} for patient ${patient.uuid}`);
+    } catch (err) {
+      logger.error(`Failed to import allergy: ${err.message}`);
+      if (err.response?.data?.error?.detail) {
+        logger.error(err.response.data.error.detail);
+      }
+      throw err;
+    }
+  }
 }

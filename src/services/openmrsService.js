@@ -10,7 +10,7 @@ export async function fetchData(url, server = 'SOURCE') {
         username: server === 'TARGET' ? config.OPENMRS_TARGET_USERNAME : config.OPENMRS_SOURCE_USERNAME,
         password: server === 'TARGET' ? config.OPENMRS_TARGET_PASSWORD : config.OPENMRS_SOURCE_PASSWORD,
       }});
-    if (typeof response.data === 'string') {
+    if (typeof response.data === 'string' && response.status !== 204) {  // 204 = no content, is what the allergies endpoint returns if no allergies
       throw new Error('Bad Response - Unauthenticated?');
     }
     return response.data;

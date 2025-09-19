@@ -38,11 +38,12 @@ export default {
       GLOBAL_PROPERTY: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/systemsetting`,
     }
   },
-  PATIENT_CUSTOM_REP: `v=custom:(uuid,display,allergyStatus,identifiers:(uuid,identifier,identifierType:(uuid),preferred,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),person:${PERSON_REP})`,
+  PATIENT_CUSTOM_REP: `v=custom:(uuid,display,identifiers:(uuid,identifier,identifierType:(uuid),preferred,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),person:${PERSON_REP})`,
   VISIT_CUSTOM_REP: `v=custom:(uuid,patient:(uuid),attributes:(uuid,value,attributeType:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),startDatetime,stopDatetime,indication:(uuid),location:(uuid),visitType:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid))`,
   ENCOUNTER_CUSTOM_REP: `v=custom:(uuid,patient:(uuid),location:(uuid),encounterType:(uuid),form:(uuid),visit:(uuid),encounterDatetime,encounterProviders:(provider:(uuid),encounterRole:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),obs:${OBS_REP})`,
   USER_CUSTOM_REP: `v=custom:(uuid,username,email,userProperties,roles:(uuid),person:${PERSON_REP},dateCreated,creator:(uuid))`,  // NOTE: we don't include date change and changed by for user due to potential circular references
   PROVIDER_CUSTOM_REP: `v=custom:(uuid,identifier,providerRole:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),person:${PERSON_REP})`,
-  PROGRAM_ENROLLMENT_CUSTOM_REP: `v=custom:(uuid,patient:(uuid),program:(uuid),location:(uuid),dateEnrolled,dateCompleted,outcome:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),states:(uuid,startDate,endDate,,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),state:(uuid)))`,
+  PROGRAM_ENROLLMENT_CUSTOM_REP: `v=custom:(uuid,patient:(uuid),program:(uuid),location:(uuid),dateEnrolled,dateCompleted,outcome:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),states:(uuid,startDate,endDate,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),state:(uuid)))`,
+  ALLERGY_CUSTOM_REP: `v=custom:(uuid,allergen:(uuid),severity:(uuid),comment,reactions:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid))`,
   GP_VISIT_ASSIGNMENT_HANDLER_DISABLED: "emrapi.emrApiVisitAssignmentHandler.disabled"
 };
