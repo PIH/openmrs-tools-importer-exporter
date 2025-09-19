@@ -90,6 +90,10 @@ export async function importPatient(record) {
   }
 
   for (const programEnrollment of record.programEnrollments) {
+    // we need to submit any states associated with the program separately to avoid the automatic state transition logic baked into REST web services
+    const states = programEnrollment.states;
+    delete programEnrollment.states;
+
     try {
       await postDataIfNotExists(CONSTANTS.TARGET.URLS.PROGRAM_ENROLLMENT, programEnrollment, programEnrollment.uuid);
       logger.info(`Imported program enrollment ${programEnrollment.uuid} for patient ${patient.uuid}`);
@@ -99,6 +103,21 @@ export async function importPatient(record) {
         logger.error(err.response.data.error.detail);
       }
       throw err;
+    }
+
+    if (states) {
+      for (const state of states) {
+        try {
+          await postDataIfNotExists(`${CONSTANTS.TARGET.URLS.PROGRAM_ENROLLMENT}/${programEnrollment.uuid}/state`, state, state.uuid);
+          logger.info(`Imported patient state ${state.uuid} for program ${programEnrollment.uuid}`);
+        } catch (err) {
+          logger.error(`Failed to import patient state: ${err.message}`);
+          if (err.response?.data?.error?.detail) {
+            logger.error(err.response.data.error.detail);
+          }
+          throw err;
+        }
+      }
     }
   }
 
