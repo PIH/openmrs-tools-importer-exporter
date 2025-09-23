@@ -49,6 +49,12 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
 
 function parseObs(inputObs) {
   let obs = inputObs;
+
+  // don't attempt to upload/import the actual value complex, will be copying over the complex_obs directory directly
+  if (inputObs.valueComplex != null) {
+    delete obs['value']
+  }
+
   if (inputObs.value != null) {
     if (inputObs.value.uuid) {
       obs.value = inputObs.value.uuid;
