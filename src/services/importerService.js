@@ -104,6 +104,19 @@ export async function importPatient(record) {
     }
   }
 
+  for (const obs of record.obs) {
+    try {
+      await postDataIfNotExists(CONSTANTS.TARGET.URLS.OBS, obs, obs.uuid);
+      logger.info(`Imported obs ${obs.uuid} for patient ${patient.uuid}`);
+    } catch (err) {
+      logger.error(`Failed to import obs: ${err.message}`);
+      if (err.response?.data?.error?.detail) {
+        logger.error(err.response.data.error.detail);
+      }
+      throw err;
+    }
+  }
+
   for (const programEnrollment of record.programEnrollments) {
     // we need to submit any states associated with the program separately to avoid the automatic state transition logic baked into REST web services
     const states = programEnrollment.states;

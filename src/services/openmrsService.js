@@ -58,7 +58,7 @@ export async function postDataIfNotExists(resourceUrl, data, uuid) {
 }
 
 export async function setGlobalProperty(propertyName, propertyValue, server = 'TARGET') {
-  await axios.post(`${server === 'TARGET' ? CONSTANTS.TARGET.URLS.GLOBAL_PROPERTY : CONSTANTS.SOURCE.URL.GLOBAL_PROPERTY}/${propertyName}`, {
+  await axios.post(`${server === 'TARGET' ? CONSTANTS.TARGET.URLS.GLOBAL_PROPERTY : CONSTANTS.SOURCE.URLS.GLOBAL_PROPERTY}/${propertyName}`, {
     value: propertyValue,
   }, { auth: {
       username: server === 'TARGET' ? config.OPENMRS_TARGET_USERNAME : config.OPENMRS_SOURCE_USERNAME,
@@ -67,5 +67,5 @@ export async function setGlobalProperty(propertyName, propertyValue, server = 'T
 }
 
 export async function getGlobalProperty(propertyName, server = 'TARGET') {
-  return fetchData(`${server === 'TARGET' ? CONSTANTS.TARGET.URLS.GLOBAL_PROPERTY : CONSTANTS.SOURCE.URL.GLOBAL_PROPERTY}/${propertyName}`, server);
+  return fetchData(`${server === 'TARGET' ? CONSTANTS.TARGET.URLS.GLOBAL_PROPERTY : CONSTANTS.SOURCE.URLS.GLOBAL_PROPERTY}/${propertyName}`, server);
 }

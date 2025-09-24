@@ -3,14 +3,7 @@ import {fetchData} from "./openmrsService.js";
 
 export async function exportUser(userUuid, server = 'SOURCE') {
   const userUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.USER : CONSTANTS.SOURCE.URLS.USER}/${userUuid}?${CONSTANTS.USER_CUSTOM_REP}`;
-  const user = await fetchData(userUrl, server);
-  return parseUser(user);
-}
-
-function parseUser(inputUser) {
-  let user = inputUser;
-  // TODO currently no processing required, remove this function entirely if not needed
-  return user;
+  return await fetchData(userUrl, server);
 }
 
 export async function exportProvider(providerUuid, server = 'SOURCE') {
@@ -27,12 +20,14 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
   const patientUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PATIENT : CONSTANTS.SOURCE.URLS.PATIENT}/${patientUuid}?${CONSTANTS.PATIENT_CUSTOM_REP}`;
   const visitsUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.VISIT : CONSTANTS.SOURCE.URLS.VISIT}?patient=${patientUuid}&${CONSTANTS.VISIT_CUSTOM_REP}`;
   const encountersUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.ENCOUNTER : CONSTANTS.SOURCE.URLS.ENCOUNTER}?patient=${patientUuid}&s=default&${CONSTANTS.ENCOUNTER_CUSTOM_REP}`;
+  const obsUrl  = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.OBS : CONSTANTS.SOURCE.URLS.OBS}?patient=${patientUuid}&${CONSTANTS.OBS_CUSTOM_REP}`;
   const patientProgramsUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PROGRAM_ENROLLMENT : CONSTANTS.SOURCE.URLS.PROGRAM_ENROLLMENT}?patient=${patientUuid}&voided=false&${CONSTANTS.PROGRAM_ENROLLMENT_CUSTOM_REP}`;
   const allergiesUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PATIENT : CONSTANTS.SOURCE.URLS.PATIENT}/${patientUuid}/allergy?${CONSTANTS.ALLERGY_CUSTOM_REP}`;
-  const [patientData, visitsData, encountersData, patientProgramsData, allergiesData] = await Promise.all([
+  const [patientData, visitsData, encountersData, obsData, patientProgramsData, allergiesData] = await Promise.all([
     fetchData(patientUrl, server),
     fetchData(visitsUrl, server),
     fetchData(encountersUrl, server),
+    fetchData(obsUrl, server),
     fetchData(patientProgramsUrl, server),
     fetchData(allergiesUrl, server)
   ]);
@@ -40,11 +35,20 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
   return {
     patient: patientData,
     visits: visitsData ? visitsData.results : [],
-    encounters: parseEncounters(encountersData ? encountersData.results : []),
+    encounters: encountersData ? encountersData.results : [],
+    obs: parseObsList(obsData ? obsData.results : []),
     programEnrollments: patientProgramsData ? patientProgramsData.results : [],
     allergies: allergiesData ? allergiesData.results : []
   };
 
+}
+
+function parseObsList(results) {
+  let obsList = [];
+  results.forEach(obs => {
+    obsList.push(parseObs(obs));
+  });
+  return obsList;
 }
 
 function parseObs(inputObs) {
@@ -77,19 +81,3 @@ function parseObs(inputObs) {
   return obs;
 }
 
-// Helper function to parse encounters
-function parseEncounters(results) {
-  let encounters = [];
-  results.forEach(result => {
-    let encounter = result;
-    if (result.obs && result.obs.length > 0) {
-      let obs = [];
-      result.obs.forEach(expObs => {
-        obs.push(parseObs(expObs));
-      });
-      encounter.obs = obs;
-    }
-    encounters.push(encounter);
-  });
-  return encounters;
-}

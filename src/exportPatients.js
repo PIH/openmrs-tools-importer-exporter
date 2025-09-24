@@ -4,6 +4,8 @@ import config from './utils/config.js';
 import logger from './utils/logger.js';
 import { exportPatient } from "./services/exporterService.js";
 import { loadUuidsFromFile } from './services/fileService.js'
+import {getGlobalProperty, setGlobalProperty} from "./services/openmrsService.js";
+import Constants from "./utils/constants.js";
 
 const UUID_FILE_PATH = path.join(config.EXPORT_PATIENT_LIST_FILE);
 const patientsToExport = loadUuidsFromFile(UUID_FILE_PATH);
@@ -12,6 +14,24 @@ const patientsToExport = loadUuidsFromFile(UUID_FILE_PATH);
 const BATCH_SIZE = 20;
 
 async function exportAllPatients() {
+
+  try {
+    // set the max results to very help results so we don't have to fetch in batches
+    await setGlobalProperty(Constants.GP_MAX_RESULTS_ABSOLUTE, "99999", 'SOURCE');
+    const globalPropertyAbsolute = await getGlobalProperty(Constants.GP_MAX_RESULTS_ABSOLUTE, 'SOURCE');
+    if (globalPropertyAbsolute.value !== "99999") {
+      throw new Error();
+    }
+    await setGlobalProperty(Constants.GP_MAX_RESULTS_DEFAULT, "99999", 'SOURCE');
+    const globalPropertyDefault = await getGlobalProperty(Constants.GP_MAX_RESULTS_DEFAULT, 'SOURCE');
+    if (globalPropertyDefault.value !== "99999") {
+      throw new Error();
+    }
+  }
+  catch (err) {
+    throw new Error('Failed to set global properties for max results: ' + err.message);
+  }
+
   try {
     // Function to process a single batch of patient UUIDs
     const processBatch = async (batch) => {
@@ -43,6 +63,22 @@ async function exportAllPatients() {
     logger.info('Patient data exported successfully');
   } catch (error) {
     logger.error('Error exporting patient data', error);
+  }
+
+  try {
+    await setGlobalProperty(Constants.GP_MAX_RESULTS_ABSOLUTE, Constants.MAX_RESULTS_ABSOLUTE, 'SOURCE');
+    const globalPropertyAbsolute = await getGlobalProperty(Constants.GP_MAX_RESULTS_ABSOLUTE, 'SOURCE');
+    if (globalPropertyAbsolute.value !== Constants.MAX_RESULTS_ABSOLUTE) {
+      throw new Error();
+    }
+    await setGlobalProperty(Constants.GP_MAX_RESULTS_DEFAULT, Constants.MAX_RESULTS_DEFAULT, 'SOURCE');
+    const globalPropertyDefault = await getGlobalProperty(Constants.GP_MAX_RESULTS_DEFAULT, 'SOURCE');
+    if (globalPropertyDefault.value !== Constants.MAX_RESULTS_DEFAULT) {
+      throw new Error();
+    }
+  }
+  catch (err) {
+    throw new Error('Failed to re-set global properties for max results: ' + err.message);
   }
 }
 
