@@ -52,6 +52,45 @@ const HYPOVOLEMIA_CONCEPT_UUID = "7b11675c-2c20-4fd5-8ccd-a5547f330ebd";
 const HYPERVOLEMIC_CONCEPT_UUID = "7c28e6fc-080d-4839-ad47-7eb7cd9a7973";
 const DIAGNOSIS_CONCEPT_UUID = "226ed7ad-b776-4b99-966d-fd818d3302c2";
 const TYPE_1_DIABETES_CONCEPT_UUID = "105903f4-7b6d-496a-b613-37ab9d0f5450";
+const RANDOM_BLOOD_SUGAR_CONCEPT_UUID = "3cd4e194-26fe-102b-80cb-0017a47871b2";
+const FASTING_FOR_BLOOD_GLUCOSE_TEST_CONCEPT_UUID = "2effb850-0384-4a09-8ae0-a7b5f7e7289f";
+const YES_CONCEPT_UUID = "3cd6f600-26fe-102b-80cb-0017a47871b2";
+const NO_CONCEPT_UUID = "3cd6f86c-26fe-102b-80cb-0017a47871b2";
+const HYPOGLYCEMIA_PRESENT_CONCEPT_UUID = "b7104b35-3a72-43e8-9879-2ab5dc8ab2fb";
+const SALBUTAMOL_PUFFS_PER_WEEK_CONCEPT_UUID = "77e19c53-b8ee-4dd2-b47a-fd1df174790e";
+const NOT_AT_ALL_CONCEPT_UUID = "160215AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const LESS_THAN_ONCE_A_WEEK_CONCEPT_UUID = "3ce107d0-26fe-102b-80cb-0017a47871b2";
+const MORE_THAN_ONCE_A_WEEK_CONCEPT_UUID = "807637af-559d-495e-a305-a63c04aa4787";
+const EVERY_DAY_CONCEPT_UUID = "1464AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const ASTHMA_CONCEPT_UUID = "3ccc4bf6-26fe-102b-80cb-0017a47871b2";
+const COPD_CONCEPT_UUID = "be7adab0-2ed5-44d7-972e-586911b08c8e";
+const VISIT_DIAGNOSIS_CONCEPT_UUID = "159947AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const ASTHMA_CLASSIFICATION_CONCEPT_UUID = "33c38f5b-0a68-4499-bd86-87ca792c868e";
+const ASTHMA_INTERMITTENT_CONCEPT_UUID = "153753AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const ASTHMA_MILD_PERSISTENT_CONCEPT_UUID = "0016512d-4388-44f0-a4b6-f6ad9e18fdcd";
+const ASTHMA_MODERATE_PERSISTENT_CONCEPT_UUID = "134026AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const ASTHMA_SEVERE_PERSISTENT_CONCEPT_UUID = "113018AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA";
+const NUMBER_OF_SEIZURES_SINCE_LAST_VISIT_CONCEPT_UUID = "027409bf-2b87-4860-a9da-3422d21c2030";
+const APPEARANCE_AT_APPT_TIME_CONCEPT_UUID = "7099fe6d-34ce-4264-84ea-2afa45362031";
+const LESS_THAN_SEVEN_DAYS_LATE_CONCEPT_UUID = "2c9715c2-dd25-47ff-927a-cc63554bb33d";
+const MORE_THAN_SEVEN_DAYS_LATE_CONCEPT_UUID = "4c4c4cbf-381d-42ac-9188-0025a150e4d0";
+const DRUG_ADHERENCE_CONCEPT_UUID = "64da3185-449f-43db-999d-61295e30f67d";
+const HOSPITALIZED_SINCE_LAST_VISIT_CONCEPT_UUID = "3cdcee66-26fe-102b-80cb-0017a47871b2";
+const HIV_STATUS_CONCEPT_UUID = "aec6ad18-f4dd-4cfa-b68d-3d7bb6ea908e";
+const NEGATIVE_CONCEPT_UUID = "3cd28732-26fe-102b-80cb-0017a47871b2";
+const POSITIVE_CONCEPT_UUID = "3cd3a7a2-26fe-102b-80cb-0017a47871b2";
+const UNKNOWN_CONCEPT_UUID = "3cd6fac4-26fe-102b-80cb-0017a47871b2";
+const RETURN_VISIT_DATE_CONCEPT_UUID = "3ce94df0-26fe-102b-80cb-0017a47871b2";
+const DISPOSITION_CONSTRUCT_CONCEPT_UUID = "164e9e1b-d26c-4a93-9bdf-af1ce4ae8fce";
+const DISPOSITION_CATEGORIES_CONCEPT_UUID = "c8b22b09-e2f2-4606-af7d-e52579996de3";
+const NCD_FOLLOWUP_VISIT_CONCEPT_UUID = "945aff50-bb81-4010-9dec-9a697d64aa42";
+const REFER_TO_CHW_CONCEPT_UUID = "455a59d5-75fa-4364-8881-ea4f06376b99";
+const ADMIT_TO_HOSIPITAL_CONCEPT_UUID = "6c047a20-c2bf-43ef-9e88-6da7b17e8c1a";
+const TRANSFER_WITHIN_HOSPITAL_CONCEPT_UUID = "0de2ced1-8ab5-47b9-ba24-24bf2c78dbf0";
+const DISCHARGED_CONCEPT_UUID = "6340fd67-facb-4a6c-a9d9-f629c9e53053";
+const NOT_APPLICABLE_CONCEPT_UUID = "3cd7b72a-26fe-102b-80cb-0017a47871b2";
+const DISPOSITION_COMMENT_CONCEPT_UUID = "b4457f1e-ef60-484c-b96a-08180a347e58";
+
 
 function getMostFrequentFieldValue(patientRecords, fieldName) {
     let fieldValue = null;
@@ -287,10 +326,193 @@ function createOpenMRSObs(patientUuid, encounterUuid, encounterDatetime, redCapV
                 if ( value === "1" ) {
                     obsMember.value = TYPE_1_DIABETES_CONCEPT_UUID;
                 }
+            } else if (key === "glucose_rdv") {  // type 1 diabetes
+                obsMember.concept = {
+                    uuid: RANDOM_BLOOD_SUGAR_CONCEPT_UUID
+                };
+                obsMember.value = value;
+            } else if (key === "fasting_rdv" && value === "1") {  // type 1 diabetes
+                obsMember.concept = {
+                    uuid: FASTING_FOR_BLOOD_GLUCOSE_TEST_CONCEPT_UUID
+                };
+                obsMember.value = YES_CONCEPT_UUID;
+            } else if (key === "hypoglycemia") {
+                obsMember.concept = {
+                    uuid: HYPOGLYCEMIA_PRESENT_CONCEPT_UUID
+                };
+                if ( value === "1" ) {
+                    obsMember.value = YES_CONCEPT_UUID;
+                } else if ( value === "0" ) {
+                    obsMember.value = NO_CONCEPT_UUID;
+                }
+            } else if (key === "salbutamol") {
+                obsMember.concept = {
+                    uuid: SALBUTAMOL_PUFFS_PER_WEEK_CONCEPT_UUID
+                };
+                switch (value) {
+                    case "1":
+                        obsMember.value = NOT_AT_ALL_CONCEPT_UUID;
+                        break;
+                    case "2":
+                        obsMember.value = LESS_THAN_ONCE_A_WEEK_CONCEPT_UUID;
+                        break;
+                    case "3":
+                        obsMember.value = MORE_THAN_ONCE_A_WEEK_CONCEPT_UUID;
+                        break;
+                    case "4":
+                        obsMember.value = EVERY_DAY_CONCEPT_UUID;
+                        break;
+                }
+            } else if (key === "resp_type") {
+                obsMember.concept = {
+                    uuid: VISIT_DIAGNOSIS_CONCEPT_UUID
+                };
+                let groupMember = {
+                    uuid: uuidv4(),
+                    obsDatetime: encounterDatetime,
+                    concept: {
+                      uuid: DIAGNOSIS_CONCEPT_UUID
+                    },
+                    person: {
+                        uuid: patientUuid
+                    },
+                    encounter: {
+                        uuid: encounterUuid
+                    }
+                };
+                switch (value) {
+                    case "1":
+                        groupMember.value = ASTHMA_CONCEPT_UUID;
+                        break;
+                    case "2":
+                        obsMember.value = COPD_CONCEPT_UUID;
+                        break;
+                    case "3":
+                        obsMember.value = OTHER_CONCEPT_UUID;
+                        break;
+                }
+                obsMember.groupMembers = [groupMember];
+            } else if (key === "asthma_class") {
+                obsMember.concept = {
+                    uuid: ASTHMA_CLASSIFICATION_CONCEPT_UUID
+                };
+                switch (value) {
+                    case "1":
+                        obsMember.value = ASTHMA_INTERMITTENT_CONCEPT_UUID;
+                        break;
+                    case "2":
+                        obsMember.value = ASTHMA_MILD_PERSISTENT_CONCEPT_UUID;
+                        break;
+                    case "3":
+                        obsMember.value = ASTHMA_MODERATE_PERSISTENT_CONCEPT_UUID;
+                        break;
+                    case "4":
+                        obsMember.value = ASTHMA_SEVERE_PERSISTENT_CONCEPT_UUID;
+                        break;
+                }
+            } else if (key === "seizure_rdv") {
+                obsMember.concept = {
+                    uuid: NUMBER_OF_SEIZURES_SINCE_LAST_VISIT_CONCEPT_UUID
+                };
+                obsMember.value = value;
+            } else if (key === "rdv_respect") {
+                obsMember.concept = {
+                    uuid: APPEARANCE_AT_APPT_TIME_CONCEPT_UUID
+                };
+                switch (value) {
+                    case "1":
+                        obsMember.value = YES_CONCEPT_UUID;
+                        break;
+                    case "2":
+                        obsMember.value = LESS_THAN_SEVEN_DAYS_LATE_CONCEPT_UUID;
+                        break;
+                    case "3":
+                        obsMember.value = MORE_THAN_SEVEN_DAYS_LATE_CONCEPT_UUID;
+                        break;
+                }
+            } else if (key === "missed_med") {
+                obsMember.concept = {
+                    uuid: DRUG_ADHERENCE_CONCEPT_UUID
+                };
+                switch (value) {
+                    case "0":
+                        obsMember.value = YES_CONCEPT_UUID;
+                        break;
+                    case "1":
+                        obsMember.value = NO_CONCEPT_UUID;
+                        break;
+                }
+            } else if (key === "hospitalized_rdv") {
+                obsMember.concept = {
+                    uuid: HOSPITALIZED_SINCE_LAST_VISIT_CONCEPT_UUID
+                };
+                switch (value) {
+                    case "0":
+                        obsMember.value = NO_CONCEPT_UUID;
+                        break;
+                    case "1":
+                        obsMember.value = YES_CONCEPT_UUID;
+                        break;
+                }
+            } else if (key === "hiv") {
+                obsMember.concept = {
+                    uuid: HIV_STATUS_CONCEPT_UUID
+                };
+                switch (value) {
+                    case "0":
+                        obsMember.value = NEGATIVE_CONCEPT_UUID;
+                        break;
+                    case "1":
+                        obsMember.value = POSITIVE_CONCEPT_UUID;
+                        break;
+                    case "9":
+                        obsMember.value = UNKNOWN_CONCEPT_UUID;
+                        break;
+                }
+            } else if (key === "date_next_rdv") {
+                obsMember.concept = {
+                    uuid: RETURN_VISIT_DATE_CONCEPT_UUID
+                };
+                obsMember.value = value;
+            } else if (key.startsWith("decision___")) {
+                obsMember.concept = {
+                    uuid: DISPOSITION_CONSTRUCT_CONCEPT_UUID
+                };
+                let groupMember = {
+                    uuid: uuidv4(),
+                    obsDatetime: encounterDatetime,
+                    concept: {
+                        uuid: DISPOSITION_CATEGORIES_CONCEPT_UUID
+                    },
+                    person: {
+                        uuid: patientUuid
+                    },
+                    encounter: {
+                        uuid: encounterUuid
+                    }
+                };
+                if ( redCapVisit.decision___1 === "1" ) {
+                    groupMember.value = NCD_FOLLOWUP_VISIT_CONCEPT_UUID;
+                } else if ( redCapVisit.decision___2 === "1" ) {
+                    groupMember.value = REFER_TO_CHW_CONCEPT_UUID;
+                } else if ( redCapVisit.decision___3 === "1" ) {
+                    groupMember.value = ADMIT_TO_HOSIPITAL_CONCEPT_UUID;
+                } else if ( redCapVisit.decision___4 === "1" ) {
+                    groupMember.value = TRANSFER_WITHIN_HOSPITAL_CONCEPT_UUID;
+                } else if ( redCapVisit.decision___5 === "1" ) {
+                    groupMember.value = DISCHARGED_CONCEPT_UUID;
+                } else if ( redCapVisit.decision___9 === "1" ) {
+                    groupMember.value = NOT_APPLICABLE_CONCEPT_UUID;
+                }
+                obsMember.groupMembers = [groupMember];
+            } else if (key === "comments_rdv") {
+                obsMember.concept = {
+                    uuid: DISPOSITION_COMMENT_CONCEPT_UUID
+                };
+                obsMember.value = value;
             }
 
-
-            if (obsMember.value) {
+            if (obsMember.value || obsMember.groupMembers) {
                 obs.push(obsMember);
             }
         }
@@ -396,7 +618,7 @@ async function convertAllRedCapRecords() {
     distinctPatientCount = distinctIds.length;
 
     for (const distinctId of distinctIds) {
-        if ( distinctId != 76 ) {
+        if ( distinctId != 57 ) {
             continue;
         }
         logger.info(`Processing REDCap patient with record_id = ${distinctId}`);
@@ -485,7 +707,10 @@ async function convertAllRedCapRecords() {
         let patientRecord = {
             patient: patient,
             visits: clinicVisits.visits,
-            encounters: clinicVisits.encounters
+            encounters: clinicVisits.encounters,
+            obs: "",
+            programEnrollments: "",
+            allergies: ""
         };
 
         const jsonData = JSON.stringify(patientRecord, null, 4);
