@@ -223,12 +223,10 @@ function createOpenMRSObs(patientUuid, encounterUuid, encounterDatetime, redCapV
 
         for (const key of keys) {
             const value = redCapVisit[key];
-            if (value === undefined || value === null || value === "" || value === "0") {
+            if (value === undefined || value === null || value === "") {
                 // skip entries with undefined, null, or empty values
                 continue;
             }
-            // Example: log each key/value; replace with your handling (e.g., map to concepts)
-            console.log(`redCapVisit[${key}] = ${value}`);
             let obsMember = {
                 uuid: uuidv4(),
                 obsDatetime: encounterDatetime,
@@ -720,7 +718,6 @@ function createOpenMRSEncounter(patientUuid, visitUuid, redCapVisit) {
 function getOpenMRSVisits(patientUuid, redCapVisits) {
     let visits = [];
     let encounters=[];
-    console.log("redCapVisits.length: " + redCapVisits.length);
 
     for (const redCapVisit of redCapVisits) {
         if (redCapVisit.date_visit ) {
@@ -739,7 +736,6 @@ function getOpenMRSVisits(patientUuid, redCapVisits) {
                     uuid: CLINIC_VISIT_TYPE_UUID
                 }
             };
-            console.log("visit: " + JSON.stringify(visit, null, 4) + "\n\n" );
             visits.push(visit);
             let encounter = createOpenMRSEncounter(patientUuid, visit.uuid, redCapVisit);
             let obs = createOpenMRSObs(patientUuid, encounter.uuid, encounter.encounterDatetime, redCapVisit);
@@ -774,12 +770,8 @@ async function convertAllRedCapRecords() {
     distinctPatientCount = distinctIds.length;
 
     for (const distinctId of distinctIds) {
-        if ( distinctId != 71 ) {
-            continue;
-        }
         logger.info(`Processing REDCap patient with record_id = ${distinctId}`);
         let patientRecords = data.filter((record)=> record.record_id === distinctId);
-        console.log("patientRecords.length: " + patientRecords.length);
         let patient = {};
         const patientUuid = uuidv4();
         patient.uuid = patientUuid;
