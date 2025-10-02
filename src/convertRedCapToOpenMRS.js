@@ -90,7 +90,58 @@ const TRANSFER_WITHIN_HOSPITAL_CONCEPT_UUID = "0de2ced1-8ab5-47b9-ba24-24bf2c78d
 const DISCHARGED_CONCEPT_UUID = "6340fd67-facb-4a6c-a9d9-f629c9e53053";
 const NOT_APPLICABLE_CONCEPT_UUID = "3cd7b72a-26fe-102b-80cb-0017a47871b2";
 const DISPOSITION_COMMENT_CONCEPT_UUID = "b4457f1e-ef60-484c-b96a-08180a347e58";
+const PRESCRIPTION_CONSTRUCT_CONCEPT_UUID = "9ab17798-1486-4d56-9218-e3578646a772";
+const MEDICATION_ORDERS_CONCEPT_UUID = "3cd9491e-26fe-102b-80cb-0017a47871b2";
+const CURRENTLY_TAKING_MEDICATION_CONCEPT_UUID = "d5afe6ab-ce66-43b0-9121-733e0f4f001d";
+const ANTI_TB_MEDICATION_CONCEPT_UUID = "2bcc2619-01c1-4f9a-a85d-8f92f4e10413";
+const ARV_MEDICATION_CONCEPT_UUID = "6e986ce6-f972-4469-8aa9-6b44f08defac";
+const OTHER_MEDICATION_CONCEPT_UUID = "3fa2be15-6e21-4603-81d9-cd2bd04d4e08";
 
+const ACETYLSALICYLIC_ACID_100MG_CONCEPT_UUID = '8d5941e8-5f86-4289-a6ba-122320814bd5';
+const AMINOPHYLLINE_SOLUTION_25MG_10ML_CONCEPT_UUID = '5815a762-e68a-42dc-aea9-57957260d44b';
+const AMLODIPINE_BESYLATE_5MG_CONCEPT_UUID = '6620289c-cc66-4892-9b2d-ecc40c746945';
+const ATENOLOL_50MG_CONCEPT_UUID = '2f8d7a99-d4ec-4ad7-b898-1c953cb332fd';
+const CARVEDILOL_12_5MG_CONCEPT_UUID = 'd809f82b-7612-4da2-b075-531f586bdd7c';
+const CAPTOPRIL_25MG_CONCEPT_UUID = '7134a5ba-2033-4833-a1ac-d256fd005932';
+const CLOPIDOGREL_75MG_CONCEPT_UUID = '8d7c8333-43f2-4e81-9923-14cdd790dcc3';
+const DIGOXIN_SOLUTION_250MCG_2ML_CONCEPT_UUID = 'cf38a1ec-9bf0-4760-8329-af3b6374be64';
+const ENALAPRIL_MALEATE_5MG_CONCEPT_UUID = '4efe3f48-2656-4178-bfcd-c6d103851084';
+const FUROSEMIDE_40MG_CONCEPT_UUID = 'fb5842a2-60ef-4539-b428-f99a1f76c85f';
+const HYDRALAZINE_HYDROCHLORIDE_25MG_CONCEPT_UUID = '2ff6dfce-cd7e-4a1c-9916-f398c4aaec1f';
+const HYDROCHLOROTHIAZIDE_25MG_CONCEPT_UUID = 'ce857097-f7a1-4178-b018-a8067a5710d1';
+const ISOSORBIDE_DINITRATE_20MG_CONCEPT_UUID = '95518896-df94-4e7d-b233-cc5af823975a';
+const LISINOPRIL_5MG_CONCEPT_UUID = 'd0876723-9087-4ea5-b26d-d46cf914835f';
+const LISINOPRIL_20MG_CONCEPT_UUID = '4534a926-8dc4-440b-bdf9-f9e96d282a28';
+const METHYLDOPA_250MG_CONCEPT_UUID = '70123af9-a72a-4f6e-a188-140d905a84be';
+const METOPROLOL_SUCCINATE_25MG_CONCEPT_UUID = '819b83c0-e218-4ffe-854c-75c941feb948';
+const METOPROLOL_TARTRATE_50MG_CONCEPT_UUID = '01bf21ba-3505-4221-ad41-d81e9aa5cc6e';
+const NIFEDIPINE_20MG_CONCEPT_UUID = 'd7937a60-a75b-42f6-9200-cd0e895606c0';
+const PROPRANOLOL_HYDROCHLORIDE_40MG_CONCEPT_UUID = '405dfa6c-ebaa-4a51-857f-b4df3788e7dd';
+const SIMVASTATIN_20MG_CONCEPT_UUID = '01f14854-8305-4b12-8a52-3e01555fd66e';
+const SPIRONOLACTONE_25MG_CONCEPT_UUID = '82f3e5d8-0701-4948-a511-7d6f932dc9e6';
+const WARFARIN_5MG_CONCEPT_UUID = '1779f27f-0272-41da-a242-c6851a9aef6d';
+const BECLOMETHASONE_50_MICROGRAM_DOSE_CONCEPT_UUID = '0dfc00d1-394a-4dd4-9a56-8b00513fce21';
+const BECLOMETHASONE_250_MICROGRAM_DOSE_CONCEPT_UUID = 'a9d56315-5c8d-4442-83ed-563ef2fa3171';
+const IPRATROPIUM_BROMIDE_250_MICROGRAM_ML_SOLUTION_CONCEPT_UUID = '8b6830f5-8807-4be1-9062-37388a737a0c';
+const MONTELUKAST_SODIUM_10_MG_TABLET_CONCEPT_UUID = '85e9b37a-b7b7-4ec9-84dc-c692b7c9187d';
+const SALBUTAMOL_100_MICROGRAM_DOSE_CONCEPT_UUID = '1420b4b9-ca35-4579-ae96-838f75b9e856';
+const GLIBENCLAMIDE_5_MG_TABLET_CONCEPT_UUID = '5c21704a-6268-4854-845d-55c573bed967';
+const INSULINE_RAPIDE_REGULAR_CONCEPT_UUID = 'def06cd2-c046-4afc-9a49-475d3481cbcf';
+const INSULINE_LENTE_INTERMEDIAIRE_CONCEPT_UUID = '568b5484-1f52-424a-a45d-3f1c9e0d92d6';
+const INSULINE_70_30_MIXTE_CONCEPT_UUID = '77077171-df0f-43c8-9a6b-245914fc143b';
+const METFORMIN_HYDROCHLORIDE_500_MG_TABLET_CONCEPT_UUID = 'afd2cd78-4dc6-4e91-ac9f-51b9e094e34a';
+const PREDNISOLONE_5_MG_TABLET_CONCEPT_UUID = 'c63b13b6-210c-4575-ae5e-bbf86b5df747';
+const BENZATHINE_BENZYLPENICILLIN_2_4_MILLION_INTERNATIONAL_UNITS_POWDER_FOR_INJECTION_CONCEPT_UUID = 'ab912f78-2112-4e87-aca7-1ded71e8a04b';
+const CARBAMAZEPINE_200MG_TABLET_CONCEPT_UUID = 'e371d811-d32c-4f6e-8493-2fa667b7b44c';
+const CIMETIDINE_200_MG_TABLET_CONCEPT_UUID = 'ef96f590-2cc3-469e-9b82-072fef563b9e';
+const CLOTRIMAZOLE_1_PERCENT_CREAM_CONCEPT_UUID = '5e11cd96-3277-4a74-968e-1aa3d3312e6c';
+const DIPHENHYDRAMINE_HYDROCHLORIDE_25_MG_TABLET_CONCEPT_UUID = '81694757-3336-4195-ac6b-ea574b9b8597';
+const DOXYCYCLINE_100MG_TABLET_CONCEPT_UUID = '8aad2a23-2977-4b5b-a30a-4a9142ce774b';
+const OMEPRAZOLE_20_MG_GASTRO_RESISTANT_CAPSULE_CONCEPT_UUID = 'cb6d3cfb-4d14-4473-af64-88a69bc09a43';
+const PHENOBARBITAL_50MG_TABLET_CONCEPT_UUID = '9a499fca-699e-4809-8175-732ef43d5c14';
+const PHENOXYMETHYLPENICILLIN_250_MG_TABLET_CONCEPT_UUID = '3fbb89a0-652f-4675-b087-63ce1bed098f';
+const POTASSIUM_CHLORIDE_600_MG_SLOW_RELEASE_TABLET_CONCEPT_UUID = '086b2092-a2e9-4a66-8790-7eb12ca328f2';
+const RANITIDINE_150_MG_FILM_COATED_TABLET_CONCEPT_UUID = '477cbb97-2ea4-4fde-b32f-e6a3dd668c2b';
 
 function getMostFrequentFieldValue(patientRecords, fieldName) {
     let fieldValue = null;
@@ -510,6 +561,111 @@ function createOpenMRSObs(patientUuid, encounterUuid, encounterDatetime, redCapV
                     uuid: DISPOSITION_COMMENT_CONCEPT_UUID
                 };
                 obsMember.value = value;
+            } else if (key === "meds_rdv___3" || key === "meds_rdv___4" || key === "meds_rdv___37") {
+                //Anti-TB, ARVs and Other medication
+                obsMember.concept = {
+                    uuid: CURRENTLY_TAKING_MEDICATION_CONCEPT_UUID
+                };
+                if ( redCapVisit.meds_rdv___3 === "1" ) {
+                    obsMember.value = ANTI_TB_MEDICATION_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___4 === "1" ) {
+                    obsMember.value = ARV_MEDICATION_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___37 === "1" ) {
+                    obsMember.value = OTHER_CONCEPT_UUID;
+                }
+            } else if (key === "med_autre") {
+                obsMember.concept = {
+                    uuid: OTHER_MEDICATION_CONCEPT_UUID
+                };
+                obsMember.value = value;
+            } else if (key.startsWith("meds_rdv___")) {
+                obsMember.concept = {
+                    uuid: PRESCRIPTION_CONSTRUCT_CONCEPT_UUID
+                };
+                let groupMember = {
+                    uuid: uuidv4(),
+                    obsDatetime: encounterDatetime,
+                    concept: {
+                        uuid: MEDICATION_ORDERS_CONCEPT_UUID
+                    },
+                    person: {
+                        uuid: patientUuid
+                    },
+                    encounter: {
+                        uuid: encounterUuid
+                    }
+                };
+                if ( redCapVisit.meds_rdv___1 === "1" ) {
+                    groupMember.value = AMINOPHYLLINE_SOLUTION_25MG_10ML_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___2 === "1" ) {
+                    groupMember.value = AMLODIPINE_BESYLATE_5MG_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___6 === "1" ) {
+                    groupMember.value = ATENOLOL_50MG_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___7 === "1" ) {
+                    groupMember.value = BECLOMETHASONE_50_MICROGRAM_DOSE_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___8 === "1" ) {
+                    groupMember.value = CAPTOPRIL_25MG_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___9 === "1" ) {
+                    groupMember.value = CARBAMAZEPINE_200MG_TABLET_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___10 === "1" ) {
+                    groupMember.value = CARVEDILOL_12_5MG_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___11 === "1" ) {
+                    groupMember.value = CIMETIDINE_200_MG_TABLET_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___12 === "1" ) {
+                    groupMember.value = CLOPIDOGREL_75MG_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___13 === "1" ) {
+                    groupMember.value = DIGOXIN_SOLUTION_250MCG_2ML_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___14 === "1" ) {
+                    groupMember.value = ENALAPRIL_MALEATE_5MG_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___15 === "1" ) {
+                    groupMember.value = FUROSEMIDE_40MG_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___16 === "1" ) {
+                    groupMember.value = GLIBENCLAMIDE_5_MG_TABLET_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___17 === "1" ) {
+                    groupMember.value = HYDRALAZINE_HYDROCHLORIDE_25MG_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___18 === "1" ) {
+                    groupMember.value = HYDROCHLOROTHIAZIDE_25MG_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___19 === "1" ) {
+                    groupMember.value = INSULINE_RAPIDE_REGULAR_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___20 === "1" ) {
+                    groupMember.value = INSULINE_70_30_MIXTE_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___21 === "1" ) {
+                    groupMember.value = INSULINE_LENTE_INTERMEDIAIRE_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___22 === "1" ) {
+                    groupMember.value = ISOSORBIDE_DINITRATE_20MG_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___23 === "1" ) {
+                    groupMember.value = LISINOPRIL_5MG_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___24 === "1" ) {
+                    groupMember.value = METFORMIN_HYDROCHLORIDE_500_MG_TABLET_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___25 === "1" ) {
+                    groupMember.value = METHYLDOPA_250MG_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___26 === "1" ) {
+                    groupMember.value = NIFEDIPINE_20MG_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___27 === "1" ) {
+                    groupMember.value = OMEPRAZOLE_20_MG_GASTRO_RESISTANT_CAPSULE_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___28 === "1" ) {
+                    groupMember.value = BENZATHINE_BENZYLPENICILLIN_2_4_MILLION_INTERNATIONAL_UNITS_POWDER_FOR_INJECTION_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___29 === "1" ) {
+                    groupMember.value = PHENOXYMETHYLPENICILLIN_250_MG_TABLET_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___30 === "1" ) {
+                    groupMember.value = PHENOBARBITAL_50MG_TABLET_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___31 === "1" ) {
+                    groupMember.value = PREDNISOLONE_5_MG_TABLET_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___32 === "1" ) {
+                    groupMember.value = RANITIDINE_150_MG_FILM_COATED_TABLET_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___33 === "1" ) {
+                    groupMember.value = SALBUTAMOL_100_MICROGRAM_DOSE_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___34 === "1" ) {
+                    groupMember.value = SIMVASTATIN_20MG_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___35 === "1" ) {
+                    groupMember.value = SPIRONOLACTONE_25MG_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___36 === "1" ) {
+                    groupMember.value = WARFARIN_5MG_CONCEPT_UUID;
+                }
+
+                if (groupMember.value) {
+                    obsMember.groupMembers = [groupMember];
+                }
             }
 
             if (obsMember.value || obsMember.groupMembers) {
@@ -618,7 +774,7 @@ async function convertAllRedCapRecords() {
     distinctPatientCount = distinctIds.length;
 
     for (const distinctId of distinctIds) {
-        if ( distinctId != 57 ) {
+        if ( distinctId != 71 ) {
             continue;
         }
         logger.info(`Processing REDCap patient with record_id = ${distinctId}`);
