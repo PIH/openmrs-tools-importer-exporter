@@ -14,6 +14,8 @@ const CLINIC_VISIT_TYPE_UUID = "f01c54cb-2225-471a-9cd5-d348552c337c";
 const HINCHE_LOCATION_UUID = "328f6a60-0370-102d-b0e3-001ec94a0cc1";
 const NCD_INITIAL_ENCOUNTER_TYPE_UUID = "ae06d311-1866-455b-8a64-126a9bd74171";
 const NCD_FOLLOWUP_ENCOUNTER_TYPE_UUID = "5cbfd6a2-92d9-4ad0-b526-9d29bfe1d10c";
+const LAB_RESULTS_ENCOUNTER_TYPE_UUID = "4d77916a-0620-11e5-a6c0-1697f925ec7b";
+const LAB_RESULTS_FORM_UUID = "5e1b0c3a-3acf-4e50-aab1-738a3a282dea";
 const REDCAP_NCD_INITIAL_FORM_UUID = "5b915a22-c695-4f60-8b2d-9a72d006b304";
 const REDCAP_NCD_FOLLOWUP_FORM_UUID = "109b588f-25a2-44e6-989d-d1d58f901a94";
 const REDCAP_STUDY_ID_CONCEPT_UUID = "08148c0a-bf99-432f-afba-1f45ba435cf7";
@@ -142,6 +144,15 @@ const PHENOBARBITAL_50MG_TABLET_CONCEPT_UUID = '9a499fca-699e-4809-8175-732ef43d
 const PHENOXYMETHYLPENICILLIN_250_MG_TABLET_CONCEPT_UUID = '3fbb89a0-652f-4675-b087-63ce1bed098f';
 const POTASSIUM_CHLORIDE_600_MG_SLOW_RELEASE_TABLET_CONCEPT_UUID = '086b2092-a2e9-4a66-8790-7eb12ca328f2';
 const RANITIDINE_150_MG_FILM_COATED_TABLET_CONCEPT_UUID = '477cbb97-2ea4-4fde-b32f-e6a3dd668c2b';
+const HBA1C_CONCEPT_UUID = '159644AAAAAAAAAAAAAAAAAAAAAAAAAAAAAA';
+const HBA1C_RESULTS_DATE_UUID = '68d6bd27-37ff-4d7a-87a0-f5e0f9c8dcc0';
+const CREATININE_CONCEPT_UUID = '668cd2a5-60dd-4dc4-889b-e09f072c6a1a';
+const TOTAL_CHOLESTEROL_CONCEPT_UUID = '4f2c0162-0a34-4d12-8361-c7c5a3489cf0';
+const LDL_CONCEPT_UUID = 'ec10a67f-913f-4a62-a0ed-43fb335ff5af';
+const HDL_CONCEPT_UUID = '600135ed-08d9-4791-8faa-94b13f1e095a';
+const TRIGLYCERIDES_CONCEPT_UUID = 'ccead4fe-b998-412d-b6bb-9e92bb02d33d';
+const INR_CONCEPT_UUID = '16e928e5-bdfb-4ec8-a9c2-9d64c78a0ce5';
+
 
 function getMostFrequentFieldValue(patientRecords, fieldName) {
     let fieldValue = null;
@@ -523,7 +534,7 @@ function createOpenMRSObs(patientUuid, encounterUuid, encounterDatetime, redCapV
                     uuid: RETURN_VISIT_DATE_CONCEPT_UUID
                 };
                 obsMember.value = value;
-            } else if (key.startsWith("decision___")) {
+            } else if (key.startsWith("decision___") && value === "1") {
                 obsMember.concept = {
                     uuid: DISPOSITION_CONSTRUCT_CONCEPT_UUID
                 };
@@ -576,7 +587,7 @@ function createOpenMRSObs(patientUuid, encounterUuid, encounterDatetime, redCapV
                     uuid: OTHER_MEDICATION_CONCEPT_UUID
                 };
                 obsMember.value = value;
-            } else if (key.startsWith("meds_rdv___")) {
+            } else if (key.startsWith("meds_rdv___") && value === "1") {
                 obsMember.concept = {
                     uuid: PRESCRIPTION_CONSTRUCT_CONCEPT_UUID
                 };
@@ -674,6 +685,113 @@ function createOpenMRSObs(patientUuid, encounterUuid, encounterDatetime, redCapV
     return obs;
 }
 
+function createObs(patientUuid, encounterUuid, encounterDatetime, concept_uuid, obsValue) {
+    if (patientUuid && encounterUuid && encounterDatetime && concept_uuid && obsValue) {
+        let obsMember = {
+            uuid: uuidv4(),
+            concept: {
+                uuid: concept_uuid
+            },
+            obsDatetime: encounterDatetime,
+            person: {
+                uuid: patientUuid
+            },
+            encounter: {
+                uuid: encounterUuid
+            },
+            value: obsValue
+        }
+        return obsMember;
+    } else {
+        return null;
+    }
+}
+
+function createOpenMRSLabResultsEncounter(patientUuid, visitUuid, redCapVisit) {
+    let labResultsEncounter = null;
+    if (redCapVisit && redCapVisit.date_visit) {
+        let encounterDatetime = redCapVisit.date_visit;
+        if (redCapVisit.hba1c || redCapVisit.hba1c_collect || redCapVisit.hba1c_result || redCapVisit.creat || redCapVisit.chol || redCapVisit.ldl || redCapVisit.hdl || redCapVisit.trig || redCapVisit.inr) {
+            let encounterUuid = uuidv4();
+            labResultsEncounter = {
+                uuid: encounterUuid,
+                encounterDatetime: encounterDatetime,
+                patient: {
+                    uuid: patientUuid
+                },
+                location: {
+                    uuid: HINCHE_LOCATION_UUID
+                },
+                encounterType: {
+                    uuid: LAB_RESULTS_ENCOUNTER_TYPE_UUID
+                },
+                form: {
+                    uuid: LAB_RESULTS_FORM_UUID
+                },
+                visit: {
+                    uuid: visitUuid
+                }
+            };
+            let obs = [];
+
+            if (redCapVisit.hba1c) {
+                let labResultObs = createObs(patientUuid, encounterUuid, encounterDatetime, HBA1C_CONCEPT_UUID, redCapVisit.hba1c);
+                if (labResultObs) {
+                    obs.push(labResultObs);
+                }
+            }
+            if (redCapVisit.hba1c_result) {
+                let labResultObs = createObs(patientUuid, encounterUuid, encounterDatetime, HBA1C_RESULTS_DATE_UUID, redCapVisit.hba1c_result);
+                if (labResultObs) {
+                    obs.push(labResultObs);
+                }
+            }
+            if (redCapVisit.creat) {
+                let labResultObs = createObs(patientUuid, encounterUuid, encounterDatetime, CREATININE_CONCEPT_UUID, redCapVisit.creat);
+                if (labResultObs) {
+                    obs.push(labResultObs);
+                }
+            }
+            if (redCapVisit.chol) {
+                let labResultObs = createObs(patientUuid, encounterUuid, encounterDatetime, TOTAL_CHOLESTEROL_CONCEPT_UUID, redCapVisit.chol);
+                if (labResultObs) {
+                    obs.push(labResultObs);
+                }
+            }
+            if (redCapVisit.ldl) {
+                let labResultObs = createObs(patientUuid, encounterUuid, encounterDatetime, LDL_CONCEPT_UUID, redCapVisit.ldl);
+                if (labResultObs) {
+                    obs.push(labResultObs);
+                }
+            }
+            if (redCapVisit.hdl) {
+                let labResultObs = createObs(patientUuid, encounterUuid, encounterDatetime, HDL_CONCEPT_UUID, redCapVisit.hdl);
+                if (labResultObs) {
+                    obs.push(labResultObs);
+                }
+            }
+            if (redCapVisit.trig) {
+                let labResultObs = createObs(patientUuid, encounterUuid, encounterDatetime, TRIGLYCERIDES_CONCEPT_UUID, redCapVisit.trig);
+                if (labResultObs) {
+                    obs.push(labResultObs);
+                }
+            }
+            if (redCapVisit.inr) {
+                let labResultObs = createObs(patientUuid, encounterUuid, encounterDatetime, INR_CONCEPT_UUID, redCapVisit.inr);
+                if (labResultObs) {
+                    obs.push(labResultObs);
+                }
+            }
+
+            if (obs.length > 0) {
+                labResultsEncounter.obs = obs;
+            }
+        }
+    }
+
+    return labResultsEncounter;
+}
+
 function createOpenMRSEncounter(patientUuid, visitUuid, redCapVisit) {
 
     let encounter = {};
@@ -741,8 +859,11 @@ function getOpenMRSVisits(patientUuid, redCapVisits) {
             let obs = createOpenMRSObs(patientUuid, encounter.uuid, encounter.encounterDatetime, redCapVisit);
             encounter.obs = obs;
             encounters.push(encounter);
+            let labResultsEnc = createOpenMRSLabResultsEncounter(patientUuid, visit.uuid, redCapVisit);
+            if (labResultsEnc) {
+                encounters.push(labResultsEnc);
+            }
         }
-
     }
     return {
         visits: visits,
