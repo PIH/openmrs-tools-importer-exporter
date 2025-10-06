@@ -12,6 +12,10 @@ const REDCAP_RECORD_ID_TYPE_UUID = "59c0c5e5-4ec4-4852-8da4-a1f4d12fcc2d";
 const PERSON_PHONE_NUMBER_ATTRIBUTE_TYPE_UUID = "14d4f066-15f5-102d-96e4-000c29c2a5d7";
 const CLINIC_VISIT_TYPE_UUID = "f01c54cb-2225-471a-9cd5-d348552c337c";
 const HINCHE_LOCATION_UUID = "328f6a60-0370-102d-b0e3-001ec94a0cc1";
+const NCD_PROGRAM_UUID = "515796ec-bf3a-11e7-abc4-cec278b6b50a";
+const TREATMENT_STOPPED_OUTCOME_UUID = "3cdc0d7a-26fe-102b-80cb-0017a47871b2";
+const PATIENT_TRASFERRED_OUT_OUTCOME_UUID = "3cdd5c02-26fe-102b-80cb-0017a47871b2";
+const PATIENT_DIED_OUTCOME_UUID = "3cdd446a-26fe-102b-80cb-0017a47871b2";
 const NCD_INITIAL_ENCOUNTER_TYPE_UUID = "ae06d311-1866-455b-8a64-126a9bd74171";
 const NCD_FOLLOWUP_ENCOUNTER_TYPE_UUID = "5cbfd6a2-92d9-4ad0-b526-9d29bfe1d10c";
 const LAB_RESULTS_ENCOUNTER_TYPE_UUID = "4d77916a-0620-11e5-a6c0-1697f925ec7b";
@@ -177,15 +181,79 @@ function getMostFrequentFieldValue(patientRecords, fieldName) {
     return fieldValue;
 }
 
-function getMostRecentFieldValue(patientRecords, fieldName) {
-    let fieldValue = null;
+function getFirstVisitDate(patientRecords) {
+    let oldestVisitDate = null;
+    if (patientRecords && patientRecords.length) {
+        // filter out records with empty date_visit
+        let nonEmptyValues = patientRecords.filter((record) => trimNonAlphanumeric(record["date_visit"]));
+        const oldestVisit = nonEmptyValues.reduce((oldest, current) => {
+            return new Date(oldest.date_visit) < new Date(current.date_visit) ? oldest : current;
+        });
+        oldestVisitDate = oldestVisit.date_visit;
+    }
+    return oldestVisitDate;
+}
+
+function createProgramEnrollment(patientUuid, patientRecords) {
+    let enrollments = [];
+    const oldestVisitDate = getFirstVisitDate(patientRecords);
+    if (oldestVisitDate) {
+        let programEnrollment = {
+            uuid: uuidv4(),
+            patient: {
+                uuid: patientUuid
+            },
+            program: {
+                uuid: NCD_PROGRAM_UUID
+            },
+            location: {
+                uuid: HINCHE_LOCATION_UUID
+            },
+            dateEnrolled: oldestVisitDate
+        }
+
+        const exitVisit = getMostRecentVisitWithFieldValue(patientRecords, "exit");
+        if ( exitVisit ) {
+            if (exitVisit.exit === "1") {
+                programEnrollment.outcome = {
+                    uuid: TREATMENT_STOPPED_OUTCOME_UUID
+                }
+            } else if (exitVisit.exit === "2") {
+                programEnrollment.outcome = {
+                    uuid: PATIENT_TRASFERRED_OUT_OUTCOME_UUID
+                }
+            } else if (exitVisit.exit === "3") {
+                programEnrollment.outcome = {
+                    uuid: PATIENT_DIED_OUTCOME_UUID
+                }
+            }
+            programEnrollment.dateCompleted = exitVisit.date_visit;
+        }
+        enrollments.push(programEnrollment);
+    }
+    return enrollments;
+}
+
+function getMostRecentVisitWithFieldValue(patientRecords, fieldName) {
+    let visit = null;
     if (patientRecords && patientRecords.length && fieldName ) {
         // look for non-empty values for the given field
         let nonEmptyValues = patientRecords.filter((record) => trimNonAlphanumeric(record[fieldName]));
         if ( nonEmptyValues.length > 0 ) {
             //order the records by date_visit descending
             nonEmptyValues.sort((a, b) => new Date(b.date_visit) - new Date(a.date_visit));
-            fieldValue = nonEmptyValues[0][fieldName];
+            visit = nonEmptyValues[0];
+        }
+    }
+    return visit;
+}
+
+function getMostRecentFieldValue(patientRecords, fieldName) {
+    let fieldValue = null;
+    if (patientRecords && patientRecords.length && fieldName ) {
+        let visit = getMostRecentVisitWithFieldValue(patientRecords, fieldName);
+        if ( visit ) {
+            fieldValue = visit[fieldName];
         }
     }
     return fieldValue;
@@ -608,6 +676,8 @@ function createOpenMRSObs(patientUuid, encounterUuid, encounterDatetime, redCapV
                     groupMember.value = AMINOPHYLLINE_SOLUTION_25MG_10ML_CONCEPT_UUID;
                 } else if ( redCapVisit.meds_rdv___2 === "1" ) {
                     groupMember.value = AMLODIPINE_BESYLATE_5MG_CONCEPT_UUID;
+                } else if ( redCapVisit.meds_rdv___5 === "1" ) {
+                    groupMember.value = ACETYLSALICYLIC_ACID_100MG_CONCEPT_UUID; //aspirin
                 } else if ( redCapVisit.meds_rdv___6 === "1" ) {
                     groupMember.value = ATENOLOL_50MG_CONCEPT_UUID;
                 } else if ( redCapVisit.meds_rdv___7 === "1" ) {
@@ -973,12 +1043,13 @@ async function convertAllRedCapRecords() {
 
         patient.person = person;
         let clinicVisits = getOpenMRSVisits(patientUuid, patientRecords);
+        let patientProgramEnrollments = createProgramEnrollment(patientUuid, patientRecords);
         let patientRecord = {
             patient: patient,
             visits: clinicVisits.visits,
             encounters: clinicVisits.encounters,
             obs: "",
-            programEnrollments: "",
+            programEnrollments: patientProgramEnrollments,
             allergies: ""
         };
 
