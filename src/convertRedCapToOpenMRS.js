@@ -9,6 +9,7 @@ import { trimNonAlphanumeric} from "./utils/utils.js";
 const REDCAP_FILE_PATH = path.join(config.REDCAP_EXPORT_FILE);
 const REDCAP_ADDRESSES_MAP_FILE_PATH = path.join(config.REDCAP_ADDRESSES_MAPPING_FILE);
 const REDCAP_RECORD_ID_TYPE_UUID = "59c0c5e5-4ec4-4852-8da4-a1f4d12fcc2d";
+const REDCAP_DOSSIER_NUMBER_TYPE_UUID = "9f9f8d7f-450d-4142-be44-13e261598faa";
 const PERSON_PHONE_NUMBER_ATTRIBUTE_TYPE_UUID = "14d4f066-15f5-102d-96e4-000c29c2a5d7";
 const CLINIC_VISIT_TYPE_UUID = "f01c54cb-2225-471a-9cd5-d348552c337c";
 const HINCHE_LOCATION_UUID = "328f6a60-0370-102d-b0e3-001ec94a0cc1";
@@ -955,13 +956,13 @@ async function convertAllRedCapRecords() {
     let patientsWithDob = 0;
     let patientsWithAge = 0;
     let patientsWithoutDobNorAge = 0;
-    let outputFileCount = 0;
 
     const distinctIds = [...new Set(data.map(item => item.record_id))];
     distinctPatientCount = distinctIds.length;
 
     for (const distinctId of distinctIds) {
         logger.info(`Processing REDCap patient with record_id = ${distinctId}`);
+
         let patientRecords = data.filter((record)=> record.record_id === distinctId);
         let patient = {};
         const patientUuid = uuidv4();
@@ -974,7 +975,17 @@ async function convertAllRedCapRecords() {
             },
             preferred: true
         }];
-
+        let dossierNumber = getMostRecentFieldValue(patientRecords, "dossier");
+        if (dossierNumber) {
+            patient.identifiers.push({
+                uuid: uuidv4(),
+                identifier: dossierNumber,
+                identifierType: {
+                    uuid: REDCAP_DOSSIER_NUMBER_TYPE_UUID
+                },
+                preferred: false
+            });
+        }
         let person = {};
         person.uuid = patientUuid;
         const gender = getMostFrequentFieldValue(patientRecords, "sex");
@@ -1059,7 +1070,6 @@ async function convertAllRedCapRecords() {
             try {
                 fs.writeFileSync(path.join(config.TARGET_DIR, filename), jsonData);
                 logger.info(`Patient data exported to ${filename}`);
-                outputFileCount++;
             } catch (error) {
                 logger.error(`Error exporting patient data for UUID: ${patientUuid}`, error);
             }
@@ -1067,10 +1077,6 @@ async function convertAllRedCapRecords() {
             printRedCapRecordWithNoDob(distinctId, patientRecords);
             patientsWithoutDobNorAge++;
         }
-        if ( outputFileCount === 20 ) {
-            break;
-        }
-        break;
     }
 
     logger.info(`Number of distinct REDCap patients: ${distinctPatientCount}`);
