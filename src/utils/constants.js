@@ -12,7 +12,7 @@ OBS_REP = OBS_REP.replace("GROUP_MEMBERS", `groupMembers:${OBS_BASE_REP}`);
 OBS_REP = OBS_REP.replace("GROUP_MEMBERS", `groupMembers:${OBS_BASE_REP}`);
 OBS_REP = OBS_REP.replace(",GROUP_MEMBERS", "");
 
-const ORDER_BASE_REP = `uuid,patient:(uuid),orderType:(uuid),orderer:(uuid),concept:(uuid),encounter:(uuid),instructions,dateActivated,autoExpireDate,dateStopped,orderReason:(uuid),orderReasonNonCoded,formNamespaceAndPath,accessionNumber,urgency,orderNumber,commentToFulfiller,careSetting:(uuid),orderGroup:(uuid),sortWeight,fulfillerStatus,fulfillerComment,dateCreated,creator:(uuid)`;
+const ORDER_BASE_REP = `uuid,patient:(uuid),action,orderType:(uuid),orderer:(uuid),concept:(uuid),encounter:(uuid),instructions,dateActivated,autoExpireDate,dateStopped,orderReason:(uuid),orderReasonNonCoded,formNamespaceAndPath,accessionNumber,urgency,orderNumber,commentToFulfiller,careSetting:(uuid),orderGroup:(uuid),sortWeight,fulfillerStatus,fulfillerComment,dateCreated,creator:(uuid)`;
 
 export default {
   SOURCE: {
