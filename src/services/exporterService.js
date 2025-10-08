@@ -22,13 +22,15 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
   const visitsUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.VISIT : CONSTANTS.SOURCE.URLS.VISIT}?patient=${patientUuid}&${CONSTANTS.VISIT_CUSTOM_REP}`;
   const encountersUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.ENCOUNTER : CONSTANTS.SOURCE.URLS.ENCOUNTER}?patient=${patientUuid}&s=default&${CONSTANTS.ENCOUNTER_CUSTOM_REP}`;
   const obsUrl  = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.OBS : CONSTANTS.SOURCE.URLS.OBS}?patient=${patientUuid}&${CONSTANTS.OBS_CUSTOM_REP}`;
+  const testOrdersUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.ORDER : CONSTANTS.SOURCE.URLS.ORDER}?orderTypes=65c912c2-88cf-46c2-83ae-2b03b1f97d3a,52a447d3-a64a-11e3-9aeb-50e549534c5e&patient=${patientUuid}&${CONSTANTS.TEST_ORDER_CUSTOM_REP}`;
   const patientProgramsUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PROGRAM_ENROLLMENT : CONSTANTS.SOURCE.URLS.PROGRAM_ENROLLMENT}?patient=${patientUuid}&voided=false&${CONSTANTS.PROGRAM_ENROLLMENT_CUSTOM_REP}`;
   const allergiesUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PATIENT : CONSTANTS.SOURCE.URLS.PATIENT}/${patientUuid}/allergy?${CONSTANTS.ALLERGY_CUSTOM_REP}`;
-  const [patientData, visitsData, encountersData, obsData, patientProgramsData, allergiesData] = await Promise.all([
+  const [patientData, visitsData, encountersData, obsData, testOrderData, patientProgramsData, allergiesData] = await Promise.all([
     fetchData(patientUrl, server),
     fetchData(visitsUrl, server),
     fetchData(encountersUrl, server),
     fetchData(obsUrl, server),
+    fetchData(testOrdersUrl, server),
     fetchData(patientProgramsUrl, server),
     fetchData(allergiesUrl, server)
   ]);
@@ -58,6 +60,18 @@ function parseProgramEnrollments(results) {
 
 function parseAllergies(results) {
   return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(results);
+}
+
+function parseTestOrderList(results) {
+  let testOrderList = [];
+  results.forEach(testOrder => {
+    testOrderList.push(parseTestOrder(testOrder));
+  })
+  return testOrderList;
+}
+
+function parseTestOrder(inputTestOrder) {
+  return {...inputTestOrder, type: 'testorder'};
 }
 
 function parseObsList(results) {
