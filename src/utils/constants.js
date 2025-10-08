@@ -12,6 +12,7 @@ OBS_REP = OBS_REP.replace("GROUP_MEMBERS", `groupMembers:${OBS_BASE_REP}`);
 OBS_REP = OBS_REP.replace("GROUP_MEMBERS", `groupMembers:${OBS_BASE_REP}`);
 OBS_REP = OBS_REP.replace(",GROUP_MEMBERS", "");
 
+const ORDER_BASE_REP = `uuid,patient:(uuid),orderType:(uuid),orderer:(uuid),concept:(uuid),encounter:(uuid),instructions,dateActivated,autoExpireDate,dateStopped,orderReason:(uuid),orderReasonNonCoded,formNamespaceAndPath,accessionNumber,urgency,orderNumber,commentToFulfiller,careSetting:(uuid),orderGroup:(uuid),sortWeight,fulfillerStatus,fulfillerComment,dateCreated,creator:(uuid)`;
 
 export default {
   SOURCE: {
@@ -20,6 +21,7 @@ export default {
       VISIT: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/visit`,
       ENCOUNTER: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/encounter`,
       OBS: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/obs`,
+      ORDER: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/order`,
       USER: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/user`,
       PROVIDER: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/providermanagement/provider`,
       PROGRAM_ENROLLMENT: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/programenrollment`,
@@ -33,6 +35,7 @@ export default {
       VISIT: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/visit`,
       ENCOUNTER: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/encounter`,
       OBS: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/obs`,
+      ORDER: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/order`,
       USER: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/user`,
       PROVIDER: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/providermanagement/provider`,
       PROGRAM_ENROLLMENT: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/programenrollment`,
@@ -49,6 +52,7 @@ export default {
   PROGRAM_ENROLLMENT_CUSTOM_REP: `v=custom:(uuid,patient:(uuid),program:(uuid),location:(uuid),dateEnrolled,dateCompleted,outcome:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),states:(uuid,startDate,endDate,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),state:(uuid)))`,
   ALLERGY_CUSTOM_REP: `v=custom:(uuid,allergen:(allergenType,codedAllergen:(uuid),nonCodedAllergen),severity:(uuid),comment,reactions:(reaction:(uuid),reactionNonCoded),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid))`,
   RELATIONSHIP_CUSTOM_REP: `v=custom:(uuid,personA:(uuid),personB:(uuid),relationshipType:(uuid),startDate,endDate,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid))`,
+  TEST_ORDER_CUSTOM_REP: `v=custom:(${ORDER_BASE_REP},specimenSource:(uuid),laterality,clinicalHistory,frequency:(uuid),numberOfRepeats,location:(uuid)`,
   GP_VISIT_ASSIGNMENT_HANDLER_DISABLED: "emrapi.emrApiVisitAssignmentHandler.disabled",
   GP_MAX_RESULTS_DEFAULT: "webservices.rest.maxResultsDefault",
   GP_MAX_RESULTS_ABSOLUTE: "webservices.rest.maxResultsAbsolute",
