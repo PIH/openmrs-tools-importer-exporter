@@ -35,8 +35,8 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
   return {
     patient: patientData,
     visits: visitsData ? visitsData.results : [],
-    encounters: encountersData ? encountersData.results : [],
-    obs: parseObsList(obsData ? obsData.results : []),
+    encounters: parseEncounters(encountersData ? encountersData.results : []),
+    obs: parseObsList(obsData ? obsData.results : []),   // note that this is only encounterless obs, the majority of the obs will be coming in via the encounter
     programEnrollments: patientProgramsData ? patientProgramsData.results : [],
     allergies: allergiesData ? allergiesData.results : []
   };
@@ -46,7 +46,10 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
 function parseObsList(results) {
   let obsList = [];
   results.forEach(obs => {
-    obsList.push(parseObs(obs));
+    // we are only collecting *encounterless* obs here
+    if (obs.encounter == null) {
+      obsList.push(parseObs(obs));
+    }
   });
   return obsList;
 }
@@ -81,3 +84,19 @@ function parseObs(inputObs) {
   return obs;
 }
 
+// Helper function to parse encounters
+function parseEncounters(results) {
+  let encounters = [];
+  results.forEach(result => {
+    let encounter = result;
+    if (result.obs && result.obs.length > 0) {
+      let obs = [];
+      result.obs.forEach(expObs => {
+        obs.push(parseObs(expObs));
+      });
+      encounter.obs = obs;
+    }
+    encounters.push(encounter);
+  });
+  return encounters;
+}
