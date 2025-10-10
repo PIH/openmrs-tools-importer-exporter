@@ -1,5 +1,6 @@
 import CONSTANTS from "../utils/constants.js";
 import {fetchData} from "./openmrsService.js";
+import {stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight} from "../utils/utils.js";
 
 export async function exportUser(userUuid, server = 'SOURCE') {
   const userUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.USER : CONSTANTS.SOURCE.URLS.USER}/${userUuid}?${CONSTANTS.USER_CUSTOM_REP}`;
@@ -33,19 +34,36 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
   ]);
 
   return {
-    patient: patientData,
-    visits: visitsData ? visitsData.results : [],
+    patient: parsePatient(patientData),
+    visits: parseVisits(visitsData ? visitsData.results : []),
     encounters: parseEncounters(encountersData ? encountersData.results : []),
     obs: parseObsList(obsData ? obsData.results : []),   // note that this is only encounterless obs, the majority of the obs will be coming in via the encounter
-    programEnrollments: patientProgramsData ? patientProgramsData.results : [],
-    allergies: allergiesData ? allergiesData.results : []
+    programEnrollments: parseProgramEnrollments(patientProgramsData ? patientProgramsData.results : []),
+    allergies: parseAllergies(allergiesData ? allergiesData.results : [])
   };
 
 }
 
+function parsePatient(results) {
+  return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(results);
+}
+
+function parseVisits(results) {
+  return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(results);
+}
+
+function parseProgramEnrollments(results) {
+  return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(results);
+}
+
+function parseAllergies(results) {
+  return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(results);
+}
+
 function parseObsList(results) {
   let obsList = [];
-  results.forEach(obs => {
+  stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(results)
+    .forEach(obs => {
     // we are only collecting *encounterless* obs here
     if (obs.encounter == null) {
       obsList.push(parseObs(obs));
@@ -87,7 +105,8 @@ function parseObs(inputObs) {
 // Helper function to parse encounters
 function parseEncounters(results) {
   let encounters = [];
-  results.forEach(result => {
+  stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(results)
+   .forEach(result => {
     let encounter = result;
     if (result.obs && result.obs.length > 0) {
       let obs = [];

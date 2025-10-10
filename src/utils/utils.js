@@ -81,3 +81,68 @@ export function sanitizeObject(obj)  {
   }
   return obj; // Return non-object, non-string values as-is
 }
+
+/**
+ * This method recursively processes all datetime fields in the object and for dates at midnight it strips the
+ * time component, while for dates at a second before midight it strips the timezone component (but keeps the time)
+ *
+ * This is to handle cases when we are migration data between two servers with different time zones; the assumption
+ * we are making is that if the event happened exactly at midnight or exactly the second before minute, this is
+ * not a "real-time" entry but a retrospective entry we want to record as happening at "midnight" or a "second
+ * before midnight" (ie at the end of the day) regardless of time zone
+ *
+ * @param obj
+ * @returns {Object}
+ */
+export function stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(obj) {
+  const isoRegexMidnight = /^(\d{4}-\d{2}-\d{2})T(00:00:00)(\.\d+)?(Z|[+-]\d{2}(:)?\d{2})?$/;
+  const isoRegexSecondBeforeMidnight = /^(\d{4}-\d{2}-\d{2}T23:59:59)(\.\d+)?(Z|[+-]\d{2}(:)?\d{2})?$/;
+  const stripTime = (isoString) => {
+    const midnightMatch = isoRegexMidnight.exec(isoString);
+    if (midnightMatch) {
+      // If the regex matches, return just the date component (group 1 of the regex).
+      return midnightMatch[1]; // YYYY-MM-DD
+    }
+    const secondBeforeMidnightMatch = isoRegexSecondBeforeMidnight.exec(isoString);
+    if (secondBeforeMidnightMatch) {
+      return secondBeforeMidnightMatch[1]; // YYYY-MM-DD
+    }
+    // If it doesn't match the condition (not midnight), return input.
+    return isoString;
+  }
+
+  return processISODates(obj, stripTime);
+}
+
+/**
+ * Recursively processes all properties of a JavaScript object that are ISO date strings.
+ *
+ * @param {object} obj - The object to check.
+ * @param {function} processDateFunction - Function to process date strings (e.g., convert or transform them).
+ * @param {string} path - Used internally for tracking nested keys (provide "" when calling the function).
+ */
+function processISODates(obj, processDateFunction, path = "") {
+  const isoDateRegex = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}(:)?\d{2})$/;
+
+  // Base case: If it's not an object or array, stop processing.
+  if (obj === null || typeof obj !== "object") {
+    return;
+  }
+
+  // Iterate through the keys of the object.
+  for (let key in obj) {
+    const value = obj[key];
+    const currentPath = path ? `${path}.${key}` : key;
+
+    // If the value is a string and matches ISO date format, process it.
+    if (typeof value === "string" && isoDateRegex.test(value)) {
+      obj[key] = processDateFunction(value, currentPath);
+    }
+
+    // If the value is an object or array, process recursively.
+    else if (typeof value === "object") {
+      obj[key] = processISODates(value, processDateFunction, currentPath);
+    }
+  }
+  return obj;
+}
