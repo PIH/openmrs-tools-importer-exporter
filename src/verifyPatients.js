@@ -6,7 +6,7 @@ import logger from './utils/logger.js';
 import config from './utils/config.js';
 import _ from "lodash"; // Import Lodash for deep object comparison
 import { diffString } from "json-diff";
-import {replaceMappings,sanitizeObject} from "./utils/utils.js";
+import {replaceMappings,sanitizeObject,convertHaiti2016TimesToDaylightSavings} from "./utils/utils.js";
 
 const USER_MAPPINGS_FILE_PATH = path.join(config.EXPORT_USER_MAPPINGS_FILE);
 const userMappings = USER_MAPPINGS_FILE_PATH ? loadMappingFile(USER_MAPPINGS_FILE_PATH) : [];
@@ -59,7 +59,12 @@ async function verifyPatients() {
           }
 
           const fileContents = await fs.readFile(patientFilePath, 'utf-8');
-          const parsedFileContents = JSON.parse(replaceMappings(replaceMappings(fileContents, providerMappings),userMappings));
+          let parsedFileContents = JSON.parse(replaceMappings(replaceMappings(fileContents, providerMappings),userMappings));
+
+          // confirm Haiti time zone times from 2016 to Eastern
+          if (config.CONVERT_HAITI_2016_DATES_DURING_VERIFICATION) {
+             parsedFileContents  = convertHaiti2016TimesToDaylightSavings(parsedFileContents);
+          }
 
           // Sanitize both objects (remove whitespace and normalize structure)
           const sanitizedPatientRecord = sanitizeObject(patientRecord);

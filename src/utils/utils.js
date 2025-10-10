@@ -114,6 +114,28 @@ export function stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(obj
   return processISODates(obj, stripTime);
 }
 
+export function convertHaiti2016TimesToDaylightSavings(obj) {
+
+  // Define the DST start and end times for New York in 2016
+  const dstStart = new Date("2016-03-13T02:00:00-05:00"); // Eastern Standard Time (UTC-5:00)
+  const dstEnd = new Date("2016-11-06T02:00:00-04:00");   // Eastern Daylight Time (UTC-4:00)
+
+  const convertTime = (isoString) => {
+    // Parse the input date
+    const inputDate = new Date(isoString);
+    // Check if the input date is during DST 2106 (between dstStart and dstEnd)
+    if (inputDate >= dstStart && inputDate < dstEnd) {
+      // If within DST, convert the date to UTC-4:00
+      const offsetDate = new Date(inputDate.getTime() - (4 * 60 * 60 * 1000)); // Subtract 4 hours to convert to UTC-4
+      // Return the result as an ISO string with the UTC timezone suffix
+      return offsetDate.toISOString().replace("Z", "-0400");
+    }
+    // If not during DST, return the original date
+    return isoString;
+  }
+  return processISODates(obj, convertTime);
+}
+
 /**
  * Recursively processes all properties of a JavaScript object that are ISO date strings.
  *
