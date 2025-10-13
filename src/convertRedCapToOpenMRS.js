@@ -187,10 +187,12 @@ function getFirstVisitDate(patientRecords) {
     if (patientRecords && patientRecords.length) {
         // filter out records with empty date_visit
         let nonEmptyValues = patientRecords.filter((record) => trimNonAlphanumeric(record["date_visit"]));
-        const oldestVisit = nonEmptyValues.reduce((oldest, current) => {
-            return new Date(oldest.date_visit) < new Date(current.date_visit) ? oldest : current;
-        });
-        oldestVisitDate = oldestVisit.date_visit;
+        if ( nonEmptyValues && nonEmptyValues.length > 0 ) {
+            const oldestVisit = nonEmptyValues.reduce((oldest, current) => {
+                return new Date(oldest.date_visit) < new Date(current.date_visit) ? oldest : current;
+            });
+            oldestVisitDate = oldestVisit.date_visit;
+        }
     }
     return oldestVisitDate;
 }
@@ -323,27 +325,25 @@ function createOpenMRSObs(patientUuid, encounterUuid, encounterDatetime, redCapV
                 };
                 obsMember.value = value;
 
-            } else if ( key.startsWith("disease_cat_rdv___")) {
+            } else if ( key.startsWith("disease_cat_rdv___") && value === "1") {
                 obsMember.concept = {
                     uuid: NCD_CATEGORY_CONCEPT_UUID
                 };
-                if ( redCapVisit.disease_cat_rdv___1 === "1" ) {
+                if ( key === "disease_cat_rdv___1" ) {
                     obsMember.value = HTN_CONCEPT_UUID;
-                } else if ( redCapVisit.disease_cat_rdv___1 === "1" ) {
-                    obsMember.value = HTN_CONCEPT_UUID;
-                } else if ( redCapVisit.disease_cat_rdv___2 === "1" ) {
+                } else if ( key === "disease_cat_rdv___2" ) {
                     obsMember.value = DIABETES_CONCEPT_UUID;
-                } else if ( redCapVisit.disease_cat_rdv___3 === "1" ) {
+                } else if ( key === "disease_cat_rdv___3" ) {
                     obsMember.value = HEART_FAILURE_CONCEPT_UUID;
-                } else if ( redCapVisit.disease_cat_rdv___4 === "1" ) {
+                } else if ( key === "disease_cat_rdv___4" ) {
                     obsMember.value = STROKE_CONCEPT_UUID;
-                } else if ( redCapVisit.disease_cat_rdv___5 === "1" ) {
+                } else if ( key === "disease_cat_rdv___5" ) {
                     obsMember.value = RESPIRATORY_CONCEPT_UUID;
-                } else if ( redCapVisit.disease_cat_rdv___6 === "1" ) {
+                } else if ( key === "disease_cat_rdv___6" ) {
                     obsMember.value = REHAB_PROGRAM_CONCEPT_UUID;
-                } else if ( redCapVisit.disease_cat_rdv___7 === "1" ) {
+                } else if ( key === "disease_cat_rdv___7" ) {
                     obsMember.value = EPILEPSY_CONCEPT_UUID;
-                } else if ( redCapVisit.disease_cat_rdv___8 === "1" ) {
+                } else if ( key === "disease_cat_rdv___8" ) {
                     obsMember.value = OTHER_CONCEPT_UUID;
                     if ( redCapVisit.disease_other ) {
                         obsMember.comment = redCapVisit.disease_other;
@@ -448,13 +448,25 @@ function createOpenMRSObs(patientUuid, encounterUuid, encounterDatetime, redCapV
                         obsMember.value = HYPOVOLEMIA_CONCEPT_UUID;
                         break;
                 }
-            } else if (key === "t1d") {  // type 1 diabetes
+            } else if (key === "t1d" && value === "1") {  // type 1 diabetes
                 obsMember.concept = {
-                    uuid: DIAGNOSIS_CONCEPT_UUID
+                    uuid: VISIT_DIAGNOSIS_CONCEPT_UUID
                 };
-                if ( value === "1" ) {
-                    obsMember.value = TYPE_1_DIABETES_CONCEPT_UUID;
-                }
+                let groupMember = {
+                    uuid: uuidv4(),
+                    obsDatetime: encounterDatetime,
+                    concept: {
+                        uuid: DIAGNOSIS_CONCEPT_UUID
+                    },
+                    person: {
+                        uuid: patientUuid
+                    },
+                    encounter: {
+                        uuid: encounterUuid
+                    },
+                    value: TYPE_1_DIABETES_CONCEPT_UUID
+                };
+                obsMember.groupMembers = [groupMember];
             } else if (key === "glucose_rdv") {  // type 1 diabetes
                 obsMember.concept = {
                     uuid: RANDOM_BLOOD_SUGAR_CONCEPT_UUID
@@ -514,10 +526,10 @@ function createOpenMRSObs(patientUuid, encounterUuid, encounterDatetime, redCapV
                         groupMember.value = ASTHMA_CONCEPT_UUID;
                         break;
                     case "2":
-                        obsMember.value = COPD_CONCEPT_UUID;
+                        groupMember.value = COPD_CONCEPT_UUID;
                         break;
                     case "3":
-                        obsMember.value = OTHER_CONCEPT_UUID;
+                        groupMember.value = OTHER_CONCEPT_UUID;
                         break;
                 }
                 obsMember.groupMembers = [groupMember];
@@ -620,20 +632,22 @@ function createOpenMRSObs(patientUuid, encounterUuid, encounterDatetime, redCapV
                         uuid: encounterUuid
                     }
                 };
-                if ( redCapVisit.decision___1 === "1" ) {
+                if ( key === "decision___1" ) {
                     groupMember.value = NCD_FOLLOWUP_VISIT_CONCEPT_UUID;
-                } else if ( redCapVisit.decision___2 === "1" ) {
+                } else if ( key === "decision___2"  ) {
                     groupMember.value = REFER_TO_CHW_CONCEPT_UUID;
-                } else if ( redCapVisit.decision___3 === "1" ) {
+                } else if ( key === "decision___3"  ) {
                     groupMember.value = ADMIT_TO_HOSIPITAL_CONCEPT_UUID;
-                } else if ( redCapVisit.decision___4 === "1" ) {
+                } else if ( key === "decision___4"  ) {
                     groupMember.value = TRANSFER_WITHIN_HOSPITAL_CONCEPT_UUID;
-                } else if ( redCapVisit.decision___5 === "1" ) {
+                } else if ( key === "decision___5"  ) {
                     groupMember.value = DISCHARGED_CONCEPT_UUID;
-                } else if ( redCapVisit.decision___9 === "1" ) {
+                } else if ( key === "decision___9"  ) {
                     groupMember.value = NOT_APPLICABLE_CONCEPT_UUID;
                 }
-                obsMember.groupMembers = [groupMember];
+                if ( groupMember.value ) {
+                    obsMember.groupMembers = [groupMember];
+                }
             } else if (key === "comments_rdv") {
                 obsMember.concept = {
                     uuid: DISPOSITION_COMMENT_CONCEPT_UUID
@@ -673,73 +687,73 @@ function createOpenMRSObs(patientUuid, encounterUuid, encounterDatetime, redCapV
                         uuid: encounterUuid
                     }
                 };
-                if ( redCapVisit.meds_rdv___1 === "1" ) {
+                if ( key === "meds_rdv___1" ) {
                     groupMember.value = AMINOPHYLLINE_SOLUTION_25MG_10ML_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___2 === "1" ) {
+                } else if ( key === "meds_rdv___2" ) {
                     groupMember.value = AMLODIPINE_BESYLATE_5MG_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___5 === "1" ) {
+                } else if ( key === "meds_rdv___5" ) {
                     groupMember.value = ACETYLSALICYLIC_ACID_100MG_CONCEPT_UUID; //aspirin
-                } else if ( redCapVisit.meds_rdv___6 === "1" ) {
+                } else if ( key === "meds_rdv___6" ) {
                     groupMember.value = ATENOLOL_50MG_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___7 === "1" ) {
+                } else if ( key === "meds_rdv___7" ) {
                     groupMember.value = BECLOMETHASONE_50_MICROGRAM_DOSE_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___8 === "1" ) {
+                } else if ( key === "meds_rdv___8" ) {
                     groupMember.value = CAPTOPRIL_25MG_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___9 === "1" ) {
+                } else if ( key === "meds_rdv___9" ) {
                     groupMember.value = CARBAMAZEPINE_200MG_TABLET_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___10 === "1" ) {
+                } else if ( key === "meds_rdv___10" ) {
                     groupMember.value = CARVEDILOL_12_5MG_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___11 === "1" ) {
+                } else if ( key === "meds_rdv___11" ) {
                     groupMember.value = CIMETIDINE_200_MG_TABLET_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___12 === "1" ) {
+                } else if ( key === "meds_rdv___12" ) {
                     groupMember.value = CLOPIDOGREL_75MG_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___13 === "1" ) {
+                } else if ( key === "meds_rdv___13" ) {
                     groupMember.value = DIGOXIN_SOLUTION_250MCG_2ML_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___14 === "1" ) {
+                } else if ( key === "meds_rdv___14" ) {
                     groupMember.value = ENALAPRIL_MALEATE_5MG_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___15 === "1" ) {
+                } else if ( key === "meds_rdv___15" ) {
                     groupMember.value = FUROSEMIDE_40MG_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___16 === "1" ) {
+                } else if ( key === "meds_rdv___16" ) {
                     groupMember.value = GLIBENCLAMIDE_5_MG_TABLET_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___17 === "1" ) {
+                } else if ( key === "meds_rdv___17" ) {
                     groupMember.value = HYDRALAZINE_HYDROCHLORIDE_25MG_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___18 === "1" ) {
+                } else if ( key === "meds_rdv___18" ) {
                     groupMember.value = HYDROCHLOROTHIAZIDE_25MG_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___19 === "1" ) {
+                } else if ( key === "meds_rdv___19" ) {
                     groupMember.value = INSULINE_RAPIDE_REGULAR_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___20 === "1" ) {
+                } else if ( key === "meds_rdv___20" ) {
                     groupMember.value = INSULINE_70_30_MIXTE_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___21 === "1" ) {
+                } else if ( key === "meds_rdv___21" ) {
                     groupMember.value = INSULINE_LENTE_INTERMEDIAIRE_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___22 === "1" ) {
+                } else if ( key === "meds_rdv___22" ) {
                     groupMember.value = ISOSORBIDE_DINITRATE_20MG_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___23 === "1" ) {
+                } else if ( key === "meds_rdv___23" ) {
                     groupMember.value = LISINOPRIL_5MG_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___24 === "1" ) {
+                } else if ( key === "meds_rdv___24" ) {
                     groupMember.value = METFORMIN_HYDROCHLORIDE_500_MG_TABLET_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___25 === "1" ) {
+                } else if ( key === "meds_rdv___25" ) {
                     groupMember.value = METHYLDOPA_250MG_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___26 === "1" ) {
+                } else if ( key === "meds_rdv___26" ) {
                     groupMember.value = NIFEDIPINE_20MG_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___27 === "1" ) {
+                } else if ( key === "meds_rdv___27" ) {
                     groupMember.value = OMEPRAZOLE_20_MG_GASTRO_RESISTANT_CAPSULE_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___28 === "1" ) {
+                } else if ( key === "meds_rdv___28" ) {
                     groupMember.value = BENZATHINE_BENZYLPENICILLIN_2_4_MILLION_INTERNATIONAL_UNITS_POWDER_FOR_INJECTION_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___29 === "1" ) {
+                } else if ( key === "meds_rdv___29" ) {
                     groupMember.value = PHENOXYMETHYLPENICILLIN_250_MG_TABLET_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___30 === "1" ) {
+                } else if ( key === "meds_rdv___30" ) {
                     groupMember.value = PHENOBARBITAL_50MG_TABLET_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___31 === "1" ) {
+                } else if ( key === "meds_rdv___31" ) {
                     groupMember.value = PREDNISOLONE_5_MG_TABLET_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___32 === "1" ) {
+                } else if ( key === "meds_rdv___32" ) {
                     groupMember.value = RANITIDINE_150_MG_FILM_COATED_TABLET_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___33 === "1" ) {
+                } else if ( key === "meds_rdv___33" ) {
                     groupMember.value = SALBUTAMOL_100_MICROGRAM_DOSE_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___34 === "1" ) {
+                } else if ( key === "meds_rdv___34" ) {
                     groupMember.value = SIMVASTATIN_20MG_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___35 === "1" ) {
+                } else if ( key === "meds_rdv___35" ) {
                     groupMember.value = SPIRONOLACTONE_25MG_CONCEPT_UUID;
-                } else if ( redCapVisit.meds_rdv___36 === "1" ) {
+                } else if ( key === "meds_rdv___36" ) {
                     groupMember.value = WARFARIN_5MG_CONCEPT_UUID;
                 }
 
@@ -962,7 +976,6 @@ async function convertAllRedCapRecords() {
 
     for (const distinctId of distinctIds) {
         logger.info(`Processing REDCap patient with record_id = ${distinctId}`);
-
         let patientRecords = data.filter((record)=> record.record_id === distinctId);
         let patient = {};
         const patientUuid = uuidv4();
