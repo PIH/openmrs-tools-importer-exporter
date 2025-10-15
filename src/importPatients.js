@@ -19,7 +19,7 @@ const PROVIDER_MAPPINGS_FILE_PATH = config.EXPORT_PROVIDER_MAPPINGS_FILE ? path.
 const providerMappings = PROVIDER_MAPPINGS_FILE_PATH ? loadMappingFile(PROVIDER_MAPPINGS_FILE_PATH) : [];
 
 // Define a batch size
-const BATCH_SIZE = 20;
+const BATCH_SIZE = 1;
 
 async function importAllPatients() {
   try {
