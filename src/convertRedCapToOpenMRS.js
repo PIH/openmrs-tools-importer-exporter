@@ -383,13 +383,21 @@ function createOpenMRSObs(patientUuid, encounterUuid, encounterDatetime, redCapV
                 obsMember.concept = {
                     uuid: SYSTOLIC_BP_CONCEPT_UUID
                 };
-                obsMember.value = value;
+                if ( (parseInt(value) >= 30) && (parseInt(value) <= 300) ) {
+                    obsMember.value = value;
+                } else {
+                    logger.warn(`Invalid systolic blood pressure value: ${value} on ${redCapVisit.date_visit} for patient with record_id: ${redCapVisit.record_id}`);
+                }
 
             } else if (key === "dbp") {
                 obsMember.concept = {
                     uuid: DIASTOLIC_BP_CONCEPT_UUID
                 };
-                obsMember.value = value;
+                if ( (parseInt(value) >= 20) && (parseInt(value) <= 200) ) {
+                    obsMember.value = value;
+                } else {
+                    logger.warn(`Invalid diastolic blood pressure value: ${value} on ${redCapVisit.date_visit} for patient with record_id: ${redCapVisit.record_id}`);
+                }
             } else if (key === "pulse") {
                 obsMember.concept = {
                     uuid: HEART_RATE_CONCEPT_UUID
