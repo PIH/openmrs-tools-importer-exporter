@@ -8,10 +8,10 @@ import _ from "lodash"; // Import Lodash for deep object comparison
 import { diffString } from "json-diff";
 import {replaceMappings,sanitizeObject,convertHaiti2016TimesToDaylightSavings} from "./utils/utils.js";
 
-const USER_MAPPINGS_FILE_PATH = path.join(config.EXPORT_USER_MAPPINGS_FILE);
+const USER_MAPPINGS_FILE_PATH = config.EXPORT_USER_MAPPINGS_FILE ? path.join(config.EXPORT_USER_MAPPINGS_FILE) : undefined;
 const userMappings = USER_MAPPINGS_FILE_PATH ? loadMappingFile(USER_MAPPINGS_FILE_PATH) : [];
 
-const PROVIDER_MAPPINGS_FILE_PATH = path.join(config.EXPORT_PROVIDER_MAPPINGS_FILE);
+const PROVIDER_MAPPINGS_FILE_PATH = config.EXPORT_PROVIDER_MAPPINGS_FILE ? path.join(config.EXPORT_PROVIDER_MAPPINGS_FILE) : undefined;
 const providerMappings = PROVIDER_MAPPINGS_FILE_PATH ? loadMappingFile(PROVIDER_MAPPINGS_FILE_PATH) : [];
 
 // Define a batch size
