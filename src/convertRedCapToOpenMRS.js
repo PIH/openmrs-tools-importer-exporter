@@ -7,7 +7,9 @@ import logger from './utils/logger.js';
 import { trimNonAlphanumeric} from "./utils/utils.js";
 
 const REDCAP_FILE_PATH = path.join(config.REDCAP_EXPORT_FILE);
+const ZL_EMR_IDENTIFIERS_FILE_PATH = path.join(config.ZL_EMR_IDENTIFIERS_FILE);
 const REDCAP_ADDRESSES_MAP_FILE_PATH = path.join(config.REDCAP_ADDRESSES_MAPPING_FILE);
+const ZL_EMR_PATIENT_IDENTIFIER_TYPE_UUID = "a541af1e-105c-40bf-b345-ba1fd6a59b85";
 const REDCAP_RECORD_ID_TYPE_UUID = "59c0c5e5-4ec4-4852-8da4-a1f4d12fcc2d";
 const REDCAP_DOSSIER_NUMBER_TYPE_UUID = "9f9f8d7f-450d-4142-be44-13e261598faa";
 const PERSON_PHONE_NUMBER_ATTRIBUTE_TYPE_UUID = "14d4f066-15f5-102d-96e4-000c29c2a5d7";
@@ -973,6 +975,12 @@ async function convertAllRedCapRecords() {
 
     const addressesMap = JSON.parse(await readFile(REDCAP_ADDRESSES_MAP_FILE_PATH, 'utf8'));
 
+    const zlEmrIds = JSON.parse(await readFile(ZL_EMR_IDENTIFIERS_FILE_PATH, 'utf8'));
+    if (!Array.isArray(zlEmrIds.identifiers)) {
+        throw new Error('Invalid JSON format');
+    }
+    const zlEmrIdsLength = zlEmrIds.identifiers.length;
+
     // counters used for printing statistics
     let distinctPatientCount = 0;
     let patientsWithDob = 0;
@@ -981,6 +989,10 @@ async function convertAllRedCapRecords() {
 
     const distinctIds = [...new Set(data.map(item => item.record_id))];
     distinctPatientCount = distinctIds.length;
+    if (distinctPatientCount > zlEmrIdsLength) {
+        throw new Error('Not enough ZL EMR identifiers for all patients');
+    }
+    let zlEmrIdIndex = 0;
 
     for (const distinctId of distinctIds) {
         logger.info(`Processing REDCap patient with record_id = ${distinctId}`);
@@ -994,7 +1006,7 @@ async function convertAllRedCapRecords() {
             identifierType: {
                 uuid: REDCAP_RECORD_ID_TYPE_UUID
             },
-            preferred: true
+            preferred: false
         }];
         let dossierNumber = getMostRecentFieldValue(patientRecords, "dossier");
         if (dossierNumber) {
@@ -1007,6 +1019,15 @@ async function convertAllRedCapRecords() {
                 preferred: false
             });
         }
+        patient.identifiers.push({
+            uuid: uuidv4(),
+            identifier: zlEmrIds.identifiers[zlEmrIdIndex],
+            identifierType: {
+                uuid: ZL_EMR_PATIENT_IDENTIFIER_TYPE_UUID
+            },
+            preferred: true
+        });
+        zlEmrIdIndex++;
         let person = {};
         person.uuid = patientUuid;
         const gender = getMostFrequentFieldValue(patientRecords, "sex");
