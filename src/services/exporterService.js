@@ -40,6 +40,7 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
     visits: parseVisits(visitsData ? visitsData.results : []),
     encounters: parseEncounters(encountersData ? encountersData.results : []),
     obs: parseObsList(obsData ? obsData.results : []),   // note that this is only encounterless obs, the majority of the obs will be coming in via the encounter
+    testOrders: parseTestOrderList(testOrderData ? testOrderData.results : []),
     programEnrollments: parseProgramEnrollments(patientProgramsData ? patientProgramsData.results : []),
     allergies: parseAllergies(allergiesData ? allergiesData.results : [])
   };
@@ -64,7 +65,8 @@ function parseAllergies(results) {
 
 function parseTestOrderList(results) {
   let testOrderList = [];
-  results.forEach(testOrder => {
+  stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(results)
+    .forEach(testOrder => {
     testOrderList.push(parseTestOrder(testOrder));
   })
   return testOrderList;
