@@ -76,6 +76,18 @@ function parseTestOrder(inputTestOrder) {
   return {...inputTestOrder, type: 'testorder'};
 }
 
+function parseTestOrderList(results) {
+  let testOrderList = [];
+  results.forEach(testOrder => {
+    testOrderList.push(parseTestOrder(testOrder));
+  })
+  return testOrderList;
+}
+
+function parseTestOrder(inputTestOrder) {
+  return {...inputTestOrder, type: 'testorder'};
+}
+
 function parseObsList(results) {
   let obsList = [];
   stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(results)
