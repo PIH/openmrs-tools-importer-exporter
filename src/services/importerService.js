@@ -122,7 +122,20 @@ export async function importPatient(record) {
       await postDataIfNotExists(CONSTANTS.TARGET.URLS.ORDER, testOrder, testOrder.uuid);
       logger.info(`Imported test order ${testOrder.uuid} for patient ${patient.uuid}`);
     } catch (err) {
-      logger.error(`Failed to import order: ${err.message}`);
+      logger.error(`Failed to import test order: ${err.message}`);
+      if (err.response?.data?.error?.detail) {
+        logger.error(err.response.data.error.detail);
+      }
+      throw err;
+    }
+  }
+
+  for (const drugOrder of record.drugOrders) {
+    try {
+      await postDataIfNotExists(CONSTANTS.TARGET.URLS.ORDER, drugOrder, drugOrder.uuid);
+      logger.info(`Imported drug order ${drugOrder.uuid} for patient ${patient.uuid}`);
+    } catch (err) {
+      logger.error(`Failed to import drug order: ${err.message}`);
       if (err.response?.data?.error?.detail) {
         logger.error(err.response.data.error.detail);
       }

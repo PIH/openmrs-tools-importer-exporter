@@ -19,19 +19,30 @@ const PROVIDER_MAPPINGS_FILE_PATH = config.EXPORT_PROVIDER_MAPPINGS_FILE ? path.
 const providerMappings = PROVIDER_MAPPINGS_FILE_PATH ? loadMappingFile(PROVIDER_MAPPINGS_FILE_PATH) : [];
 
 // Define a batch size
-const BATCH_SIZE = 1;
+const BATCH_SIZE = config.IMPORT_PATIENTS_BATCH_SIZE ? config.IMPORT_PATIENTS_BATCH_SIZE : 1;
 
 async function importAllPatients() {
   try {
     // disable the visit assignment handler so that we don't manipulate encounters when saving
     await setGlobalProperty(Constants.GP_VISIT_ASSIGNMENT_HANDLER_DISABLED, true, 'TARGET');
-    const globalProperty = await getGlobalProperty(Constants.GP_VISIT_ASSIGNMENT_HANDLER_DISABLED, 'TARGET');
-    if (globalProperty.value !== 'true') {
+    const globalPropertyVisitAssignmentHandler = await getGlobalProperty(Constants.GP_VISIT_ASSIGNMENT_HANDLER_DISABLED, 'TARGET');
+    if (globalPropertyVisitAssignmentHandler.value !== 'true') {
+      throw new Error();
+    }
+    // allow setting order number and stopping inactive orders
+    await setGlobalProperty(Constants.GP_ALLOW_SETTING_ORDER_NUMBER, true, 'TARGET');
+    const globalPropertyAllowSettingOrderNumber = await getGlobalProperty(Constants.GP_ALLOW_SETTING_ORDER_NUMBER, 'TARGET');
+    if (globalPropertyAllowSettingOrderNumber.value !== 'true') {
+      throw new Error();
+    }
+    await setGlobalProperty(Constants.GP_IGNORE_ATTEMPTS_TO_STOP_INACTIVE_ORDERS, true, 'TARGET');
+    const globalPropertyIgnoreAttemptsToStopInactiveOrders = await getGlobalProperty(Constants.GP_IGNORE_ATTEMPTS_TO_STOP_INACTIVE_ORDERS, 'TARGET');
+    if (globalPropertyIgnoreAttemptsToStopInactiveOrders.value !== 'true') {
       throw new Error();
     }
   }
   catch (err) {
-    throw new Error('Failed to disable the visit assignment handler: ' + err.message);
+    throw new Error('Failed to set necessary global properties: ' + err.message);
   }
 
   try {
@@ -53,15 +64,26 @@ async function importAllPatients() {
   }
 
   try {
-    // re-enable the visit assignment handler
+    // set all global properties back to false
     await setGlobalProperty(Constants.GP_VISIT_ASSIGNMENT_HANDLER_DISABLED, false, 'TARGET');
-    const globalProperty = await getGlobalProperty(Constants.GP_VISIT_ASSIGNMENT_HANDLER_DISABLED, 'TARGET');
-    if (globalProperty.value !== 'false') {
+    const globalPropertyVisitAssignmentHandler = await getGlobalProperty(Constants.GP_VISIT_ASSIGNMENT_HANDLER_DISABLED, 'TARGET');
+    if (globalPropertyVisitAssignmentHandler.value !== 'false') {
+      throw new Error();
+    }
+    // allow setting order number and stopping inactive orders
+    await setGlobalProperty(Constants.GP_ALLOW_SETTING_ORDER_NUMBER, false, 'TARGET');
+    const globalPropertyAllowSettingOrderNumber = await getGlobalProperty(Constants.GP_ALLOW_SETTING_ORDER_NUMBER, 'TARGET');
+    if (globalPropertyAllowSettingOrderNumber.value !== 'false') {
+      throw new Error();
+    }
+    await setGlobalProperty(Constants.GP_IGNORE_ATTEMPTS_TO_STOP_INACTIVE_ORDERS, false, 'TARGET');
+    const globalPropertyIgnoreAttemptsToStopInactiveOrders = await getGlobalProperty(Constants.GP_IGNORE_ATTEMPTS_TO_STOP_INACTIVE_ORDERS, 'TARGET');
+    if (globalPropertyIgnoreAttemptsToStopInactiveOrders.value !== 'false') {
       throw new Error();
     }
   }
   catch (err) {
-    throw new Error('Failed to re-enable the visit assignment handler: ' + err.message);
+    throw new Error('Failed to set necessary global properties: ' + err.message);
   }
 }
 

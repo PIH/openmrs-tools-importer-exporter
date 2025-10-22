@@ -53,9 +53,15 @@ export default {
   ALLERGY_CUSTOM_REP: `v=custom:(uuid,allergen:(allergenType,codedAllergen:(uuid),nonCodedAllergen),severity:(uuid),comment,reactions:(reaction:(uuid),reactionNonCoded),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid))`,
   RELATIONSHIP_CUSTOM_REP: `v=custom:(uuid,personA:(uuid),personB:(uuid),relationshipType:(uuid),startDate,endDate,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid))`,
   TEST_ORDER_CUSTOM_REP: `v=custom:(${ORDER_BASE_REP},specimenSource:(uuid),laterality,clinicalHistory,frequency:(uuid),numberOfRepeats,location:(uuid)`,
+  DRUG_ORDER_CUSTOM_REP: `v=custom:(${ORDER_BASE_REP},previousOrder:(uuid),drug:(uuid),dose,doseUnits:(uuid),dosingType,frequency:(uuid),asNeeded,quantity,quantityUnits:(uuid),asNeededCondition,numRefills,dosingInstructions,duration,durationUnits:(uuid),route:(uuid),brandName,dispenseAsWritten,drugNonCoded)`,
   GP_VISIT_ASSIGNMENT_HANDLER_DISABLED: "emrapi.emrApiVisitAssignmentHandler.disabled",
   GP_MAX_RESULTS_DEFAULT: "webservices.rest.maxResultsDefault",
   GP_MAX_RESULTS_ABSOLUTE: "webservices.rest.maxResultsAbsolute",
+  GP_ALLOW_SETTING_ORDER_NUMBER: "order.allowManuallySettingOrderNumber",
+  GP_IGNORE_ATTEMPTS_TO_STOP_INACTIVE_ORDERS: "order.ignoreAttemptsToStopInactiveOrders",
   MAX_RESULTS_DEFAULT: "500",
   MAX_RESULTS_ABSOLUTE: "3000",
+  DRUG_ORDER_TYPE_UUID: "131168f4-15f5-102d-96e4-000c29c2a5d7",
+  TEST_ORDER_TYPE_UUID:"52a447d3-a64a-11e3-9aeb-50e549534c5e",
+  PATHOLOGY_TEST_ORDER_TYPE: "65c912c2-88cf-46c2-83ae-2b03b1f97d3a"
 };
