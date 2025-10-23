@@ -168,3 +168,14 @@ function processISODates(obj, processDateFunction, path = "") {
   }
   return obj;
 }
+
+/**
+ * Given a list of elements with a uuid, sorts them by uuid
+ * Used to enforce a consistent ordering to allow easier verification of data pre-and-post migration
+ *
+ * @param results
+ * @returns {*}
+ */
+export function sortByUuid(results) {
+  return results.sort((a, b) => a.uuid.localeCompare(b.uuid));
+}

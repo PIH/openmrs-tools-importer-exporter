@@ -1,6 +1,6 @@
 import CONSTANTS from "../utils/constants.js";
 import {fetchData} from "./openmrsService.js";
-import {stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight} from "../utils/utils.js";
+import {sortByUuid, stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight} from "../utils/utils.js";
 
 export async function exportUser(userUuid, server = 'SOURCE') {
   const userUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.USER : CONSTANTS.SOURCE.URLS.USER}/${userUuid}?${CONSTANTS.USER_CUSTOM_REP}`;
@@ -22,13 +22,17 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
   const visitsUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.VISIT : CONSTANTS.SOURCE.URLS.VISIT}?patient=${patientUuid}&${CONSTANTS.VISIT_CUSTOM_REP}`;
   const encountersUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.ENCOUNTER : CONSTANTS.SOURCE.URLS.ENCOUNTER}?patient=${patientUuid}&s=default&${CONSTANTS.ENCOUNTER_CUSTOM_REP}`;
   const obsUrl  = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.OBS : CONSTANTS.SOURCE.URLS.OBS}?patient=${patientUuid}&${CONSTANTS.OBS_CUSTOM_REP}`;
+  const testOrdersUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.ORDER : CONSTANTS.SOURCE.URLS.ORDER}?orderTypes=${CONSTANTS.TEST_ORDER_TYPE_UUID},${CONSTANTS.PATHOLOGY_TEST_ORDER_TYPE}&patient=${patientUuid}&${CONSTANTS.TEST_ORDER_CUSTOM_REP}`;
+  const drugOrderUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.ORDER : CONSTANTS.SOURCE.URLS.ORDER}?orderTypes=${CONSTANTS.DRUG_ORDER_TYPE_UUID}&patient=${patientUuid}&${CONSTANTS.DRUG_ORDER_CUSTOM_REP}`;
   const patientProgramsUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PROGRAM_ENROLLMENT : CONSTANTS.SOURCE.URLS.PROGRAM_ENROLLMENT}?patient=${patientUuid}&voided=false&${CONSTANTS.PROGRAM_ENROLLMENT_CUSTOM_REP}`;
   const allergiesUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PATIENT : CONSTANTS.SOURCE.URLS.PATIENT}/${patientUuid}/allergy?${CONSTANTS.ALLERGY_CUSTOM_REP}`;
-  const [patientData, visitsData, encountersData, obsData, patientProgramsData, allergiesData] = await Promise.all([
+  const [patientData, visitsData, encountersData, obsData, testOrderData, drugOrderData, patientProgramsData, allergiesData] = await Promise.all([
     fetchData(patientUrl, server),
     fetchData(visitsUrl, server),
     fetchData(encountersUrl, server),
     fetchData(obsUrl, server),
+    fetchData(testOrdersUrl, server),
+    fetchData(drugOrderUrl, server),
     fetchData(patientProgramsUrl, server),
     fetchData(allergiesUrl, server)
   ]);
@@ -38,6 +42,8 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
     visits: parseVisits(visitsData ? visitsData.results : []),
     encounters: parseEncounters(encountersData ? encountersData.results : []),
     obs: parseObsList(obsData ? obsData.results : []),   // note that this is only encounterless obs, the majority of the obs will be coming in via the encounter
+    testOrders: parseTestOrderList(testOrderData ? testOrderData.results : []),
+    drugOrders: parseDrugOrderList(drugOrderData ? drugOrderData.results : []),
     programEnrollments: parseProgramEnrollments(patientProgramsData ? patientProgramsData.results : []),
     allergies: parseAllergies(allergiesData ? allergiesData.results : [])
   };
@@ -49,20 +55,62 @@ function parsePatient(results) {
 }
 
 function parseVisits(results) {
-  return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(results);
+  return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results));
 }
 
 function parseProgramEnrollments(results) {
-  return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(results);
+  return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results));
 }
 
 function parseAllergies(results) {
-  return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(results);
+  return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results));
+}
+
+function parseDrugOrderList(results, processedUuids = []) {
+  let drugOrderList = [];
+  let unprocessedDrugOrderList = [];
+  stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results))
+    .forEach(drugOrder => {
+      // if we haven't processsed the previous order, we don't want to add this one to the order list yet
+      if (drugOrder.previousOrder?.uuid && !processedUuids.includes(drugOrder.previousOrder.uuid)) {
+        unprocessedDrugOrderList.push(drugOrder);
+      }
+      // otherwise, process as normal
+      else {
+        processedUuids.push(drugOrder.uuid);
+        drugOrderList.push(parseDrugOrder(drugOrder));
+      }
+
+    })
+  // recursively process any unprocessed orders and add to the list
+  // TODO: will run infinitely if there are voided previous orders (which would not be included in the export), can this happen IRL?
+  if (unprocessedDrugOrderList.length > 0) {
+    drugOrderList.push(...parseDrugOrderList(unprocessedDrugOrderList, processedUuids));
+  }
+  return drugOrderList;
+}
+
+function parseDrugOrder(inputDrugOrder) {
+  return {...inputDrugOrder, type: 'drugorder'};
+}
+
+// TODO do we need the recursive previous order here as well (we aren't currently including the previous order in the test export)
+function parseTestOrderList(results) {
+  let testOrderList = [];
+  stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results))
+    .forEach(testOrder => {
+    testOrderList.push(parseTestOrder(testOrder));
+  })
+  return testOrderList;
+}
+
+function parseTestOrder(inputTestOrder) {
+  return {...inputTestOrder, type: 'testorder'};
 }
 
 function parseObsList(results) {
   let obsList = [];
-  stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(results)
+  stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results))
     .forEach(obs => {
     // we are only collecting *encounterless* obs here
     if (obs.encounter == null) {
@@ -105,7 +153,7 @@ function parseObs(inputObs) {
 // Helper function to parse encounters
 function parseEncounters(results) {
   let encounters = [];
-  stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(results)
+  stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results))
    .forEach(result => {
     let encounter = result;
     if (result.obs && result.obs.length > 0) {
