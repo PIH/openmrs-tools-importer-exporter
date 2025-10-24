@@ -1,4 +1,5 @@
 import CONSTANTS from "../utils/constants.js";
+import config from "../utils/config.js";
 import {fetchData} from "./openmrsService.js";
 import {sortByUuid, stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight} from "../utils/utils.js";
 
@@ -40,10 +41,10 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
   return {
     patient: parsePatient(patientData),
     visits: parseVisits(visitsData ? visitsData.results : []),
-    encounters: parseEncounters(encountersData ? encountersData.results : []),
-    obs: parseObsList(obsData ? obsData.results : []),   // note that this is only encounterless obs, the majority of the obs will be coming in via the encounter
-    testOrders: parseTestOrderList(testOrderData ? testOrderData.results : []),
-    drugOrders: parseDrugOrderList(drugOrderData ? drugOrderData.results : []),
+    encounters: parseEncounters(encountersData ? encountersData.results : [], server),
+    obs: parseObsList(obsData ? obsData.results : [], server),   // note that this is only encounterless obs, the majority of the obs will be coming in via the encounter
+    testOrders: parseTestOrderList(testOrderData ? testOrderData.results : [], server),
+    drugOrders: parseDrugOrderList(drugOrderData ? drugOrderData.results : [], server),
     programEnrollments: parseProgramEnrollments(patientProgramsData ? patientProgramsData.results : []),
     allergies: parseAllergies(allergiesData ? allergiesData.results : [])
   };
@@ -66,7 +67,7 @@ function parseAllergies(results) {
   return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results));
 }
 
-function parseDrugOrderList(results, processedUuids = []) {
+function parseDrugOrderList(results, server, processedUuids = []) {
   let drugOrderList = [];
   let unprocessedDrugOrderList = [];
   stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results))
@@ -78,50 +79,63 @@ function parseDrugOrderList(results, processedUuids = []) {
       // otherwise, process as normal
       else {
         processedUuids.push(drugOrder.uuid);
-        drugOrderList.push(parseDrugOrder(drugOrder));
+        drugOrderList.push(parseDrugOrder(drugOrder,server));
       }
 
     })
   // recursively process any unprocessed orders and add to the list
   // TODO: will run infinitely if there are voided previous orders (which would not be included in the export), can this happen IRL?
   if (unprocessedDrugOrderList.length > 0) {
-    drugOrderList.push(...parseDrugOrderList(unprocessedDrugOrderList, processedUuids));
+    drugOrderList.push(...parseDrugOrderList(unprocessedDrugOrderList, server, processedUuids));
   }
   return drugOrderList;
 }
 
-function parseDrugOrder(inputDrugOrder) {
-  return {...inputDrugOrder, type: 'drugorder'};
+function parseDrugOrder(inputDrugOrder, server) {
+  return {
+    ...inputDrugOrder,
+    orderNumber: (config.ORDER_NUMBER_PREFIX && server ==='SOURCE') ? (config.ORDER_NUMBER_PREFIX + '-' + inputDrugOrder.orderNumber) : inputDrugOrder.orderNumber,
+    type: 'drugorder'
+  };
 }
 
 // TODO do we need the recursive previous order here as well (we aren't currently including the previous order in the test export)
-function parseTestOrderList(results) {
+function parseTestOrderList(results, server) {
   let testOrderList = [];
   stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results))
     .forEach(testOrder => {
-    testOrderList.push(parseTestOrder(testOrder));
+    testOrderList.push(parseTestOrder(testOrder, server));
   })
   return testOrderList;
 }
 
-function parseTestOrder(inputTestOrder) {
-  return {...inputTestOrder, type: 'testorder'};
+function parseTestOrder(inputTestOrder, server) {
+  return {
+    ...inputTestOrder,
+    orderNumber: (config.ORDER_NUMBER_PREFIX  && server === 'SOURCE') ? (config.ORDER_NUMBER_PREFIX + '-' + inputTestOrder.orderNumber) : inputTestOrder.orderNumber,
+    type: 'testorder'
+  };
 }
 
-function parseObsList(results) {
+function parseObsList(results, server) {
   let obsList = [];
   stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results))
     .forEach(obs => {
     // we are only collecting *encounterless* obs here
     if (obs.encounter == null) {
-      obsList.push(parseObs(obs));
+      obsList.push(parseObs(obs, server));
     }
   });
   return obsList;
 }
 
-function parseObs(inputObs) {
+function parseObs(inputObs, server) {
   let obs = inputObs;
+
+  // if this is a Test Order Number obs, append any order number prefix when exportings from source server
+  if (obs.concept.uuid === CONSTANTS.TEST_ORDER_NUMBER_CONCEPT_UUID) {
+    obs.value = (config.ORDER_NUMBER_PREFIX && server ==='SOURCE') ? (config.ORDER_NUMBER_PREFIX + '-' + obs.value) : obs.value;
+  }
 
   // don't attempt to upload/import the actual value complex, will be copying over the complex_obs directory directly
   if (inputObs.valueComplex != null) {
@@ -141,7 +155,7 @@ function parseObs(inputObs) {
   if (inputObs.groupMembers && inputObs.groupMembers.length > 0) {
     let importedGroupMembers = [];
     inputObs.groupMembers.forEach(expGroupMember => {
-      importedGroupMembers.push(parseObs(expGroupMember));
+      importedGroupMembers.push(parseObs(expGroupMember, server));
     });
     obs.groupMembers = importedGroupMembers;
   } else {
@@ -151,7 +165,7 @@ function parseObs(inputObs) {
 }
 
 // Helper function to parse encounters
-function parseEncounters(results) {
+function parseEncounters(results, server) {
   let encounters = [];
   stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results))
    .forEach(result => {
@@ -159,7 +173,7 @@ function parseEncounters(results) {
     if (result.obs && result.obs.length > 0) {
       let obs = [];
       result.obs.forEach(expObs => {
-        obs.push(parseObs(expObs));
+        obs.push(parseObs(expObs, server));
       });
       encounter.obs = obs;
     }
