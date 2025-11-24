@@ -51,8 +51,29 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
 
 }
 
+/**
+ * This function is used to parse the person attributes from the REST response and
+ * replaces person.attributes.value.uuid with just the value of the uuid.
+ * @param person
+ * @returns person
+ */
+function parsePersonAttributes(results) {
+  if (results.person?.attributes) {
+      results.person.attributes = results.person.attributes.map(attr => {
+          if (attr.value && typeof attr.value === 'object' && attr.value.uuid) {
+              return {
+                  ...attr,
+                  value: attr.value.uuid
+              };
+          }
+          return attr;
+      });
+  }
+  return results;
+}
+
 function parsePatient(results) {
-  return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(results);
+  return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(parsePersonAttributes(results));
 }
 
 function parseVisits(results) {
