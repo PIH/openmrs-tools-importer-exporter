@@ -142,6 +142,7 @@ function parseObs(inputObs, server) {
     delete obs['value']
   }
 
+  // REST expects value coded obs just to have the uuid string directly set as the value
   if (inputObs.value != null) {
     if (inputObs.value.uuid) {
       obs.value = inputObs.value.uuid;
