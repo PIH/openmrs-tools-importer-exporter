@@ -15,6 +15,9 @@ const FAILED_DIR = path.join(TARGET_DIR, 'failed');
 const USER_MAPPINGS_FILE_PATH = config.EXPORT_USER_MAPPINGS_FILE ? path.join(config.EXPORT_USER_MAPPINGS_FILE) : undefined;
 const userMappings = USER_MAPPINGS_FILE_PATH ? loadMappingFile(USER_MAPPINGS_FILE_PATH) : [];
 
+const PATIENT_IDENTIFIERS_MAPPINGS_FILE_PATH = config.EXPORT_PATIENT_IDENTIFIERS_MAPPINGS_FILE ? path.join(config.EXPORT_PATIENT_IDENTIFIERS_MAPPINGS_FILE) : undefined;
+const patientIdentifiersMappings = PATIENT_IDENTIFIERS_MAPPINGS_FILE_PATH ? loadMappingFile(PATIENT_IDENTIFIERS_MAPPINGS_FILE_PATH) : [];
+
 const PROVIDER_MAPPINGS_FILE_PATH = config.EXPORT_PROVIDER_MAPPINGS_FILE ? path.join(config.EXPORT_PROVIDER_MAPPINGS_FILE) : undefined;
 const providerMappings = PROVIDER_MAPPINGS_FILE_PATH ? loadMappingFile(PROVIDER_MAPPINGS_FILE_PATH) : [];
 
@@ -93,7 +96,7 @@ async function processFile(file) {
   try {
     const content = await fs.readFile(filePath, 'utf8');
     // replace any user and provider mappings
-    const updatedContent = replaceMappings(replaceMappings(content, providerMappings),userMappings);
+    const updatedContent = replaceMappings(replaceMappings(replaceMappings(content, providerMappings),userMappings), patientIdentifiersMappings);
     const patientRecord = JSON.parse(updatedContent);
 
     // Import record

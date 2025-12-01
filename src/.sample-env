@@ -10,5 +10,6 @@ EXPORT_USER_LIST_FILE=/tmp/user-uuids.csv
 EXPORT_PROVIDER_LIST_FILE=/tmp/providers-uuids.csv
 EXPORT_RELATIONSHIP_LIST_FILE=/tmp/relationship-uuids.csv
 EXPORT_USER_MAPPINGS_FILE=/tmp/user-mappings.csv
+EXPORT_PATIENT_IDENTIFIERS_MAPPINGS_FILE=/tmp/patient-identifiers-mappings.csv
 EXPORT_PROVIDER_MAPPINGS_FILE=/tmp/provider-mappings.csv
 TARGET_DIR=/tmp
