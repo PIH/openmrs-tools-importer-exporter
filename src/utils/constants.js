@@ -1,6 +1,6 @@
 import config from "../utils/config.js";
 
-const PERSON_REP = `(uuid,gender,birthdate,birthdateEstimated,dead,deathDate,causeOfDeath,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),` +
+const PERSON_REP = `(uuid,gender,birthdate,birthdateEstimated,dead,deathDate,causeOfDeath:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),` +
   `names:(uuid,preferred,prefix,givenName,familyName,familyName2,familyNamePrefix,familyNameSuffix,middleName,degree,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),` +
   `addresses:(preferred,address1,address2,address3,address4,address5,address6,address7,address8,address9,address10,address11,address12,address13,address14,address15,cityVillage,stateProvince,postalCode,countyDistrict,country,latitude,longitude,startDate,endDate,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),` +
   `attributes:(uuid,value,attributeType:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)))`
@@ -43,7 +43,7 @@ export default {
       GLOBAL_PROPERTY: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/systemsetting`,
     }
   },
-  PATIENT_CUSTOM_REP: `v=custom:(uuid,display,identifiers:(uuid,identifier,identifierType:(uuid),preferred,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),person:${PERSON_REP})`,
+  PATIENT_CUSTOM_REP: `v=custom:(uuid,display,identifiers:(uuid,identifier,location:(uuid),identifierType:(uuid),preferred,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),person:${PERSON_REP})`,
   VISIT_CUSTOM_REP: `v=custom:(uuid,patient:(uuid),attributes:(uuid,value,attributeType:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),startDatetime,stopDatetime,indication:(uuid),location:(uuid),visitType:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid))`,
   ENCOUNTER_CUSTOM_REP: `v=custom:(uuid,patient:(uuid),location:(uuid),encounterType:(uuid),form:(uuid),visit:(uuid),encounterDatetime,encounterProviders:(provider:(uuid),encounterRole:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),obs:${OBS_REP})`,
   OBS_CUSTOM_REP: `v=custom:${OBS_REP}`,
