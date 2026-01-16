@@ -75,7 +75,10 @@ export async function importPatient(record) {
     if (err.response?.data?.error?.detail) {
       logger.error(err.response.data.error.detail);
     }
-    throw err;
+    if(err.response?.data?.error?.globalErrors) {
+        logger.error(JSON.stringify(err.response.data.error.globalErrors));
+    }
+      throw err;
   }
 
   for (const visit of record.visits) {
@@ -87,6 +90,9 @@ export async function importPatient(record) {
       if (err.response?.data?.error?.detail) {
         logger.error(err.response.data.error.detail);
       }
+        if(err.response?.data?.error?.globalErrors) {
+            logger.error(JSON.stringify(err.response.data.error.globalErrors));
+        }
       throw err;
     }
   }
@@ -100,6 +106,9 @@ export async function importPatient(record) {
       if (err.response?.data?.error?.detail) {
         logger.error(err.response.data.error.detail);
       }
+      if(err.response?.data?.error?.globalErrors) {
+         logger.error(JSON.stringify(err.response.data.error.globalErrors));
+      }
       throw err;
     }
   }
@@ -112,6 +121,9 @@ export async function importPatient(record) {
       logger.error(`Failed to import obs: ${err.message}`);
       if (err.response?.data?.error?.detail) {
         logger.error(err.response.data.error.detail);
+      }
+      if(err.response?.data?.error?.globalErrors) {
+        logger.error(JSON.stringify(err.response.data.error.globalErrors));
       }
       throw err;
     }
