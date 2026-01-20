@@ -153,6 +153,9 @@ function parseObsList(results, server) {
 function parseObs(inputObs, server) {
   let obs = inputObs;
 
+  // delete the resourceVersion, as this varies when the obs gets updated with interpretation and reference ranges
+  delete obs['resourceVersion'];
+
   // if this is a Test Order Number obs, append any order number prefix when exportings from source server
   if (obs.concept.uuid === CONSTANTS.TEST_ORDER_NUMBER_CONCEPT_UUID) {
     obs.value = (config.ORDER_NUMBER_PREFIX && server ==='SOURCE') ? (config.ORDER_NUMBER_PREFIX + '-' + obs.value) : obs.value;
