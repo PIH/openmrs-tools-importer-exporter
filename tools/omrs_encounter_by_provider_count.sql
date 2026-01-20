@@ -1,0 +1,2 @@
+select family_name, count(*) from encounter e, encounter_provider ep, provider p, person_name pn where e.voided=0
+and ep.encounter_id = e.encounter_id and ep.provider_id = p.provider_id and pn.person_id = p.person_id group by family_name ;
