@@ -154,6 +154,7 @@ function parseObs(inputObs, server) {
   let obs = inputObs;
 
   // delete the resourceVersion, as this varies when the obs gets updated with interpretation and reference ranges
+  // see: https://pihemr.atlassian.net/browse/UHM-9051
   delete obs['resourceVersion'];
 
   // if this is a Test Order Number obs, append any order number prefix when exportings from source server
