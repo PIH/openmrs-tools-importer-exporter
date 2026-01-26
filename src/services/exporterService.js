@@ -5,12 +5,14 @@ import {sortByUuid, stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight
 
 export async function exportUser(userUuid, server = 'SOURCE') {
   const userUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.USER : CONSTANTS.SOURCE.URLS.USER}/${userUuid}?${CONSTANTS.USER_CUSTOM_REP}`;
-  return await fetchData(userUrl, server);
+  const userData = await fetchData(userUrl, server);
+  return parsePersonAttributes(userData);
 }
 
 export async function exportProvider(providerUuid, server = 'SOURCE') {
   const providerUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PROVIDER : CONSTANTS.SOURCE.URLS.PROVIDER}/${providerUuid}?${CONSTANTS.PROVIDER_CUSTOM_REP}`;
-  return await fetchData(providerUrl, server);
+  const providerData = await fetchData(providerUrl, server);
+  return parsePersonAttributes(providerData);
 }
 
 export async function exportRelationship(relationshipUuid, server = 'SOURCE') {
