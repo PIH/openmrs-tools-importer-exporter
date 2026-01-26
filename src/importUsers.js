@@ -13,6 +13,9 @@ const MAPPED_TO_EXISTING_DIR = path.join(TARGET_DIR, 'mapped_to_existing');
 
 const USER_MAPPINGS_FILE_PATH = config.EXPORT_USER_MAPPINGS_FILE ? path.join(config.EXPORT_USER_MAPPINGS_FILE) : undefined;
 const userMappings = USER_MAPPINGS_FILE_PATH ? loadMappingFile(USER_MAPPINGS_FILE_PATH) : [];
+
+const USER_ROLE_MAPPINGS_FILE_PATH = config.EXPORT_USER_ROLE_MAPPINGS_FILE ? path.join(config.EXPORT_USER_ROLE_MAPPINGS_FILE) : undefined;
+const userRoleMappings = USER_ROLE_MAPPINGS_FILE_PATH ? loadMappingFile(USER_ROLE_MAPPINGS_FILE_PATH) : [];
 // Define a batch size
 // since there are a limited number of users, just use batch of size 1 (I noticed a problem with higher batch sizes)
 const BATCH_SIZE = 1;
@@ -73,8 +76,9 @@ async function processFile(file) {
       return;
     }
 
-    // replace any user mappings before import
-    const updatedContent = replaceMappings(content,userMappings);
+    // replace any user mappings and roles before import
+    let updatedContent = replaceMappings(content,userRoleMappings);
+    updatedContent = replaceMappings(updatedContent,userMappings);
     const user = JSON.parse(updatedContent);
 
     // Import record
