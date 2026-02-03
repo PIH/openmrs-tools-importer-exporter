@@ -58,6 +58,23 @@ export async function importRelationship(relationship) {
   }
 }
 
+export async function importPerson(person) {
+    logger.info(`Importing person ${person.uuid}`);
+
+    try {
+        await postDataIfNotExists(CONSTANTS.TARGET.URLS.PERSON, person, person.uuid);
+    } catch (err) {
+        logger.error(`Failed to import person: ${err.message}`);
+        if (err.response?.data?.error?.detail) {
+            logger.error(err.response.data.error.detail);
+        }
+        if (err.response?.data?.error?.globalErrors) {
+            logger.error(JSON.stringify(err.response.data.error.globalErrors));
+        }
+        throw err;
+    }
+}
+
 export async function importPatient(record) {
   const patient = record.patient;
   logger.info(`Importing patient ${patient.uuid}`);

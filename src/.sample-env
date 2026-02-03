@@ -6,6 +6,7 @@ OPENMRS_TARGET_CONTEXT_PATH=http://localhost:8080/openmrs
 OPENMRS_TARGET_USERNAME=test
 OPENMRS_TARGET_PASSWORD=test123
 EXPORT_PATIENT_LIST_FILE=/tmp/patient-uuids.csv
+EXPORT_PERSON_LIST_FILE=/tmp/person-uuids.csv
 EXPORT_USER_LIST_FILE=/tmp/user-uuids.csv
 EXPORT_PROVIDER_LIST_FILE=/tmp/providers-uuids.csv
 EXPORT_RELATIONSHIP_LIST_FILE=/tmp/relationship-uuids.csv
