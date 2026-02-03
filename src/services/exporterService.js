@@ -20,6 +20,12 @@ export async function exportRelationship(relationshipUuid, server = 'SOURCE') {
   return await fetchData(relationshipUrl, server);
 }
 
+export async function exportPerson(personUuid, server = 'SOURCE') {
+    const personUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PERSON : CONSTANTS.SOURCE.URLS.PERSON}/${personUuid}?${CONSTANTS.PERSON_CUSTOM_REP}`;
+    const personData = await fetchData(personUrl, server);
+    return parsePersonAttributes(personData);
+}
+
 export async function exportPatient(patientUuid, server = 'SOURCE') {
   const patientUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PATIENT : CONSTANTS.SOURCE.URLS.PATIENT}/${patientUuid}?${CONSTANTS.PATIENT_CUSTOM_REP}`;
   const visitsUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.VISIT : CONSTANTS.SOURCE.URLS.VISIT}?patient=${patientUuid}&${CONSTANTS.VISIT_CUSTOM_REP}`;
