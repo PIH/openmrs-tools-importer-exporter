@@ -23,6 +23,10 @@ export function loadMappingFile(filePath) {
     // Read the file content
     const content = fs.readFileSync(filePath, 'utf8');
 
+    const keyValuePairs = {};
+    if (!content) {
+      return keyValuePairs;
+    }
     // Split content by lines and remove any extraneous whitespace or empty lines
     const lines = content
       .split('\n')
@@ -30,7 +34,6 @@ export function loadMappingFile(filePath) {
       .filter(line => line.length > 0);
 
     // Process each line into key-value pairs (assume first column is key, second is value)
-    const keyValuePairs = {};
     lines.forEach((line) => {
       const [rawKey, rawValue] = line.split(',').map(part => part.trim());
 

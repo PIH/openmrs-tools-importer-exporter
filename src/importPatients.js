@@ -21,6 +21,8 @@ const patientIdentifiersMappings = PATIENT_IDENTIFIERS_MAPPINGS_FILE_PATH ? load
 const PROVIDER_MAPPINGS_FILE_PATH = config.EXPORT_PROVIDER_MAPPINGS_FILE ? path.join(config.EXPORT_PROVIDER_MAPPINGS_FILE) : undefined;
 const providerMappings = PROVIDER_MAPPINGS_FILE_PATH ? loadMappingFile(PROVIDER_MAPPINGS_FILE_PATH) : [];
 
+const WORKFLOW_STATE_MAPPINGS_FILE_PATH = config.EXPORT_PROGRAM_WORKFLOW_STATE_MAPPINGS_FILE ? path.join(config.EXPORT_PROGRAM_WORKFLOW_STATE_MAPPINGS_FILE) : undefined;
+const workflowStateMappings = WORKFLOW_STATE_MAPPINGS_FILE_PATH ? loadMappingFile(WORKFLOW_STATE_MAPPINGS_FILE_PATH) : [];
 // Define a batch size
 const BATCH_SIZE = config.IMPORT_PATIENTS_BATCH_SIZE ? config.IMPORT_PATIENTS_BATCH_SIZE : 1;
 
@@ -96,7 +98,7 @@ async function processFile(file) {
   try {
     const content = await fs.readFile(filePath, 'utf8');
     // replace any user and provider mappings
-    const updatedContent = replaceMappings(replaceMappings(replaceMappings(content, providerMappings),userMappings), patientIdentifiersMappings);
+    const updatedContent = replaceMappings(replaceMappings(replaceMappings(replaceMappings(content, providerMappings),userMappings), patientIdentifiersMappings), workflowStateMappings);
     const patientRecord = JSON.parse(updatedContent);
 
     // Import record
