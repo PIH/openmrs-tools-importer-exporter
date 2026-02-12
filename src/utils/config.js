@@ -1,6 +1,5 @@
 // config.js
 import dotenv from 'dotenv';
-import process from 'process';
 dotenv.config();
 
 const config = {
