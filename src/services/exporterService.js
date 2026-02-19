@@ -80,8 +80,11 @@ function parseUserAttributes(results) {
  * @returns person
  */
 function parsePersonAttributes(results) {
-  if (results.person?.attributes) {
-      results.person.attributes = results.person.attributes.map(attr => {
+  let personAttributes = null;
+
+  if ( results.attributes || results.person?.attributes !== null) {
+      personAttributes = results.attributes || results.person?.attributes;
+      personAttributes = personAttributes.map(attr => {
           if (attr.value && typeof attr.value === 'object' && attr.value.uuid) {
               return {
                   ...attr,
@@ -90,6 +93,11 @@ function parsePersonAttributes(results) {
           }
           return attr;
       });
+      if (results.attributes) {
+          results.attributes = personAttributes;
+      } else {
+          results.person.attributes = personAttributes;
+      }
   }
   return results;
 }

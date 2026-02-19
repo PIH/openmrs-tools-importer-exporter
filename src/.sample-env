@@ -14,4 +14,5 @@ EXPORT_USER_MAPPINGS_FILE=/tmp/user-mappings.csv
 EXPORT_USER_ROLE_MAPPINGS_FILE=/tmp/user-role-mappings.csv
 EXPORT_PATIENT_IDENTIFIERS_MAPPINGS_FILE=/tmp/patient-identifiers-mappings.csv
 EXPORT_PROVIDER_MAPPINGS_FILE=/tmp/provider-mappings.csv
+EXPORT_PROGRAM_WORKFLOW_STATE_MAPPINGS_FILE=/tmp/program-workflow-state-mappings.csv
 TARGET_DIR=/tmp
