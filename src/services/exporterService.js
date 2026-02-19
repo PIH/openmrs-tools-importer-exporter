@@ -6,7 +6,7 @@ import {sortByUuid, stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight
 export async function exportUser(userUuid, server = 'SOURCE') {
   const userUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.USER : CONSTANTS.SOURCE.URLS.USER}/${userUuid}?${CONSTANTS.USER_CUSTOM_REP}`;
   const userData = await fetchData(userUrl, server);
-  return parsePersonAttributes(userData);
+  return parseUserAttributes(parsePersonAttributes(userData));
 }
 
 export async function exportProvider(providerUuid, server = 'SOURCE') {
@@ -57,6 +57,20 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
     allergies: parseAllergies(allergiesData ? allergiesData.results : [])
   };
 
+}
+
+/**
+ * This function is used to parse the user properties from the REST response and
+ * drop all properties of type "authentication.%" (we don't want to export authentication details,
+ * these will need to be set up again on the target system)
+ */
+function parseUserAttributes(results) {
+  if (results.userProperties) {
+      results.userProperties =  Object.fromEntries(
+        Object.entries(results.userProperties).filter(([key, value]) => !key.startsWith('authentication.'))
+      );
+  }
+  return results;
 }
 
 /**
