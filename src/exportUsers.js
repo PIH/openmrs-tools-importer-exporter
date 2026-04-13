@@ -28,12 +28,19 @@ async function exportAllUsers() {
     const processBatch = async (batch) => {
       const exportPromises = batch.map(async (userUuid) => {
         try {
+          const filename = `${userUuid}_user.json`;
+          const filePath = path.join(config.TARGET_DIR, filename);
+
+          if (fs.existsSync(filePath)) {
+            logger.info(`Skipping ${filename}, file already exists`);
+            return;
+          }
+
           const userRecord = await exportUser(userUuid);
           const jsonData = JSON.stringify(userRecord, null, 4);
-          const filename = `${userUuid}_user.json`;
 
           // Save to file
-          fs.writeFileSync(path.join(config.TARGET_DIR, filename), jsonData);
+          fs.writeFileSync(filePath, jsonData);
           logger.info(`User data exported to ${filename}`);
         } catch (error) {
           logger.error(`Error exporting user data for UUID: ${userUuid}`, error);
