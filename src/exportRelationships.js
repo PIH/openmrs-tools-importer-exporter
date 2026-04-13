@@ -17,12 +17,19 @@ async function exportAllRelationships() {
     const processBatch = async (batch) => {
       const exportPromises = batch.map(async (relationshipUuid) => {
         try {
+          const filename = `${relationshipUuid}_relationship.json`;
+          const filePath = path.join(config.TARGET_DIR, filename);
+
+          if (fs.existsSync(filePath)) {
+            logger.info(`Skipping ${filename}, file already exists`);
+            return;
+          }
+
           const relationshipRecord = await exportRelationship(relationshipUuid);
           const jsonData = JSON.stringify(relationshipRecord, null, 4);
-          const filename = `${relationshipUuid}_relationship.json`;
 
           // Save to file
-          fs.writeFileSync(path.join(config.TARGET_DIR, filename), jsonData);
+          fs.writeFileSync(filePath, jsonData);
           logger.info(`Relationship data exported to ${filename}`);
         } catch (error) {
           logger.error(`Error exporting relationship data for UUID: ${relationshipUuid}`, error);

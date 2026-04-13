@@ -30,12 +30,19 @@ async function exportAllProviders() {
     const processBatch = async (batch) => {
       const exportPromises = batch.map(async (providerUuid) => {
         try {
+          const filename = `${providerUuid}_provider.json`;
+          const filePath = path.join(config.TARGET_DIR, filename);
+
+          if (fs.existsSync(filePath)) {
+            logger.info(`Skipping ${filename}, file already exists`);
+            return;
+          }
+
           const providerRecord = await exportProvider(providerUuid);
           const jsonData = JSON.stringify(providerRecord, null, 4);
-          const filename = `${providerUuid}_provider.json`;
 
           // Save to file
-          fs.writeFileSync(path.join(config.TARGET_DIR, filename), jsonData);
+          fs.writeFileSync(filePath, jsonData);
           logger.info(`Provider data exported to ${filename}`);
         } catch (error) {
           logger.error(`Error exporting provider data for UUID: ${providerUuid}`, error);

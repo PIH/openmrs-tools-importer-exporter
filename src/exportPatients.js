@@ -37,12 +37,19 @@ async function exportAllPatients() {
     const processBatch = async (batch) => {
       const exportPromises = batch.map(async (patientUuid) => {
         try {
+          const filename = `${patientUuid}_patient.json`;
+          const filePath = path.join(config.TARGET_DIR, filename);
+
+          if (fs.existsSync(filePath)) {
+            logger.info(`Skipping ${filename}, file already exists`);
+            return;
+          }
+
           const patientRecord = await exportPatient(patientUuid);
           const jsonData = JSON.stringify(patientRecord, null, 4);
-          const filename = `${patientUuid}_patient.json`;
 
           // Save to file
-          fs.writeFileSync(path.join(config.TARGET_DIR, filename), jsonData);
+          fs.writeFileSync(filePath, jsonData);
           logger.info(`Patient data exported to ${filename}`);
         } catch (error) {
           logger.error(`Error exporting patient data for UUID: ${patientUuid}`, error);
