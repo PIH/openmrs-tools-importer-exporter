@@ -83,8 +83,8 @@ export function sanitizeObject(obj)  {
 }
 
 /**
- * This method recursively processes all datetime fields in the object and for dates at midnight it strips the
- * time component, while for dates at a second before midight it strips the timezone component (but keeps the time)
+ * This method recursively processes all datetime fields in the object and for dates at midnight and
+ * for dates at a second before midnight it strips the timezone component
  *
  * This is to handle cases when we are migration data between two servers with different time zones; the assumption
  * we are making is that if the event happened exactly at midnight or exactly the second before minute, this is
@@ -94,23 +94,20 @@ export function sanitizeObject(obj)  {
  * @param obj
  * @returns {Object}
  */
-export function stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(obj) {
-  const isoRegexMidnight = /^(\d{4}-\d{2}-\d{2})T(00:00:00)(\.\d+)?(Z|[+-]\d{2}(:)?\d{2})?$/;
-  const isoRegexSecondBeforeMidnight = /^(\d{4}-\d{2}-\d{2}T23:59:59)(\.\d+)?(Z|[+-]\d{2}(:)?\d{2})?$/;
-  const stripTime = (isoString) => {
-    const midnightMatch = isoRegexMidnight.exec(isoString);
-    if (midnightMatch) {
-      // If the regex matches, return just the date component (group 1 of the regex).
-      return midnightMatch[1]; // YYYY-MM-DD
-    }
-    const secondBeforeMidnightMatch = isoRegexSecondBeforeMidnight.exec(isoString);
-    if (secondBeforeMidnightMatch) {
-      return secondBeforeMidnightMatch[1]; // YYYY-MM-DD
-    }
-    // If it doesn't match the condition (not midnight), return input.
-    return isoString;
+const isoRegexMidnight = /^(\d{4}-\d{2}-\d{2}T00:00:00)(\.\d+)?(Z|[+-]\d{2}(:)?\d{2})?$/;
+const isoRegexSecondBeforeMidnight = /^(\d{4}-\d{2}-\d{2}T23:59:59)(\.\d+)?(Z|[+-]\d{2}(:)?\d{2})?$/;
+const stripTime = (isoString) => {
+  const midnightMatch = isoRegexMidnight.exec(isoString);
+  if (midnightMatch) {
+    return midnightMatch[1]; // YYYY-MM-DDTHH:MM:SS
   }
-
+  const secondBeforeMidnightMatch = isoRegexSecondBeforeMidnight.exec(isoString);
+  if (secondBeforeMidnightMatch) {
+    return secondBeforeMidnightMatch[1]; // YYYY-MM-DDTHH:MM:SS
+  }
+  return isoString;
+}
+export function stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(obj) {
   return processISODates(obj, stripTime);
 }
 
