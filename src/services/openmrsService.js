@@ -1,15 +1,34 @@
 import axios from 'axios';
+import { wrapper } from 'axios-cookiejar-support';
+import { CookieJar } from 'tough-cookie';
 import logger from '../utils/logger.js';
 import config from '../utils/config.js';
 import CONSTANTS from '../utils/constants.js';
 
+const sourceClient = wrapper(axios.create({
+  jar: new CookieJar(),
+  auth: {
+    username: config.OPENMRS_SOURCE_USERNAME,
+    password: config.OPENMRS_SOURCE_PASSWORD,
+  },
+}));
+
+const targetClient = wrapper(axios.create({
+  jar: new CookieJar(),
+  auth: {
+    username: config.OPENMRS_TARGET_USERNAME,
+    password: config.OPENMRS_TARGET_PASSWORD,
+  },
+}));
+
+function getClient(server) {
+  return server === 'TARGET' ? targetClient : sourceClient;
+}
+
 // Helper function to get data from OpenMRS API with Basic Authentication
 export async function fetchData(url, server = 'SOURCE') {
   try {
-    const response = await axios.get(url, { auth: {
-        username: server === 'TARGET' ? config.OPENMRS_TARGET_USERNAME : config.OPENMRS_SOURCE_USERNAME,
-        password: server === 'TARGET' ? config.OPENMRS_TARGET_PASSWORD : config.OPENMRS_SOURCE_PASSWORD,
-      }});
+    const response = await getClient(server).get(url);
     if (typeof response.data === 'string' && response.status !== 204) {  // 204 = no content, is what the allergies endpoint returns if no allergies
       throw new Error('Bad Response - Unauthenticated?');
     }
@@ -28,10 +47,7 @@ export async function fetchData(url, server = 'SOURCE') {
 export async function postDataIfNotExists(resourceUrl, data, uuid) {
   try {
     const getUrl = `${resourceUrl}/${uuid}`;
-    const response = await axios.get(getUrl, {auth: {
-        username: config.OPENMRS_TARGET_USERNAME,
-        password: config.OPENMRS_TARGET_PASSWORD,
-      }});
+    const response = await targetClient.get(getUrl);
     if (response.data?.uuid === uuid) {
       // our script, has currently written, does not overwrite objects that already exist (equality based on uuid)
       logger.info(`Resource already exists: ${getUrl}`);
@@ -41,10 +57,7 @@ export async function postDataIfNotExists(resourceUrl, data, uuid) {
     }
   } catch (err) {
     if (err.response && err.response.status === 404) {
-      const response = await axios.post(resourceUrl, data, { auth: {
-          username: config.OPENMRS_TARGET_USERNAME,
-          password: config.OPENMRS_TARGET_PASSWORD,
-        } });
+      const response = await targetClient.post(resourceUrl, data);
       if (response.status !== 201) {
         throw new Error(`Failed to create resource at ${resourceUrl}, status code: ${response.status}`);
       }
@@ -58,12 +71,9 @@ export async function postDataIfNotExists(resourceUrl, data, uuid) {
 }
 
 export async function setGlobalProperty(propertyName, propertyValue, server = 'TARGET') {
-  await axios.post(`${server === 'TARGET' ? CONSTANTS.TARGET.URLS.GLOBAL_PROPERTY : CONSTANTS.SOURCE.URLS.GLOBAL_PROPERTY}/${propertyName}`, {
+  await getClient(server).post(`${server === 'TARGET' ? CONSTANTS.TARGET.URLS.GLOBAL_PROPERTY : CONSTANTS.SOURCE.URLS.GLOBAL_PROPERTY}/${propertyName}`, {
     value: propertyValue,
-  }, { auth: {
-      username: server === 'TARGET' ? config.OPENMRS_TARGET_USERNAME : config.OPENMRS_SOURCE_USERNAME,
-      password: server === 'TARGET' ? config.OPENMRS_TARGET_PASSWORD : config.OPENMRS_SOURCE_PASSWORD,
-    } });
+  });
 }
 
 export async function getGlobalProperty(propertyName, server = 'TARGET') {
