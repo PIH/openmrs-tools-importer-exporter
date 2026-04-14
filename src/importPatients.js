@@ -24,7 +24,7 @@ const providerMappings = PROVIDER_MAPPINGS_FILE_PATH ? loadMappingFile(PROVIDER_
 const WORKFLOW_STATE_MAPPINGS_FILE_PATH = config.EXPORT_PROGRAM_WORKFLOW_STATE_MAPPINGS_FILE ? path.join(config.EXPORT_PROGRAM_WORKFLOW_STATE_MAPPINGS_FILE) : undefined;
 const workflowStateMappings = WORKFLOW_STATE_MAPPINGS_FILE_PATH ? loadMappingFile(WORKFLOW_STATE_MAPPINGS_FILE_PATH) : [];
 // Define a batch size
-const BATCH_SIZE = config.IMPORT_PATIENTS_BATCH_SIZE ? config.IMPORT_PATIENTS_BATCH_SIZE : 1;
+const BATCH_SIZE = config.IMPORT_PATIENTS_BATCH_SIZE ? parseInt(config.IMPORT_PATIENTS_BATCH_SIZE, 10) : 1;
 
 async function importAllPatients() {
   try {
@@ -60,7 +60,7 @@ async function importAllPatients() {
     // Process each batch sequentially
     for (const batch of fileBatches) {
       logger.info(`Processing a batch of ${batch.length} files.`);
-      await Promise.all(batch.map(async file => processFile(file)));
+      await Promise.all(batch.map(file => processFile(file)));
     }
 
     logger.info(`All files processed.`);

@@ -14,7 +14,7 @@ const USER_MAPPINGS_FILE_PATH = config.EXPORT_USER_MAPPINGS_FILE ? path.join(con
 const userMappings = USER_MAPPINGS_FILE_PATH ? loadMappingFile(USER_MAPPINGS_FILE_PATH) : [];
 
 // Define a batch size
-const BATCH_SIZE = config.IMPORT_PERSONS_BATCH_SIZE ? config.IMPORT_PERSONS_BATCH_SIZE : 1;
+const BATCH_SIZE = config.IMPORT_PERSONS_BATCH_SIZE ? parseInt(config.IMPORT_PERSONS_BATCH_SIZE, 10) : 1;
 
 async function importAllPersons() {
     try {
