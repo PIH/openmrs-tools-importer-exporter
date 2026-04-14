@@ -5,6 +5,11 @@ const PERSON_REP = `(uuid,gender,birthdate,birthdateEstimated,dead,deathDate,cau
   `addresses:(preferred,address1,address2,address3,address4,address5,address6,address7,address8,address9,address10,address11,address12,address13,address14,address15,cityVillage,stateProvince,postalCode,countyDistrict,country,latitude,longitude,startDate,endDate,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),` +
   `attributes:(uuid,value,attributeType:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)))`
 
+const PERSON_USER_REP = `(uuid,gender,birthdate,birthdateEstimated,dead,deathDate,causeOfDeath:(uuid),dateCreated,creator:(uuid),dateChanged,` +
+  `names:(uuid,preferred,prefix,givenName,familyName,familyName2,familyNamePrefix,familyNameSuffix,middleName,degree,dateCreated,creator:(uuid),dateChanged),` +
+  `addresses:(preferred,address1,address2,address3,address4,address5,address6,address7,address8,address9,address10,address11,address12,address13,address14,address15,cityVillage,stateProvince,postalCode,countyDistrict,country,latitude,longitude,startDate,endDate,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),` +
+  `attributes:(uuid,value,attributeType:(uuid),dateCreated,dateChanged))`  // for users we don't included changed by, retired by, and creator of person attributes to avoid circular references
+
 const OBS_BASE_REP = `(uuid,concept:(uuid),person:(uuid),obsDatetime,location:(uuid),encounter:(uuid),comment,accessionNumber,formNamespaceAndPath,status,valueModifier,valueCodedName:(uuid),value:(uuid),valueComplex,dateCreated,creator:(uuid),GROUP_MEMBERS)`
 // support two levels of nested obs
 let OBS_REP = OBS_BASE_REP;
@@ -50,7 +55,7 @@ export default {
   VISIT_CUSTOM_REP: `v=custom:(uuid,patient:(uuid),attributes:(uuid,value,attributeType:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),startDatetime,stopDatetime,indication:(uuid),location:(uuid),visitType:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid))`,
   ENCOUNTER_CUSTOM_REP: `v=custom:(uuid,patient:(uuid),location:(uuid),encounterType:(uuid),form:(uuid),visit:(uuid),encounterDatetime,encounterProviders:(provider:(uuid),encounterRole:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),obs:${OBS_REP})`,
   OBS_CUSTOM_REP: `v=custom:${OBS_REP}`,
-  USER_CUSTOM_REP: `v=custom:(uuid,username,email,userProperties,retired,retiredBy:(uuid),retireReason,roles:(uuid),person:${PERSON_REP},dateCreated,creator:(uuid))`,  // NOTE: we don't include date change and changed by for user due to potential circular references
+  USER_CUSTOM_REP: `v=custom:(uuid,username,email,userProperties,retired,retireReason,roles:(uuid),person:${PERSON_USER_REP},dateCreated,creator:(uuid),dateChanged)`,  // NOTE: we don't include changed by and retired by for user due to potential circular references
   PROVIDER_CUSTOM_REP: `v=custom:(uuid,identifier,providerRole:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),person:${PERSON_REP})`,
   PROGRAM_ENROLLMENT_CUSTOM_REP: `v=custom:(uuid,patient:(uuid),program:(uuid),location:(uuid),dateEnrolled,dateCompleted,outcome:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),states:(uuid,startDate,endDate,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),state:(uuid)))`,
   ALLERGY_CUSTOM_REP: `v=custom:(uuid,allergen:(allergenType,codedAllergen:(uuid),nonCodedAllergen),severity:(uuid),comment,reactions:(reaction:(uuid),reactionNonCoded),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid))`,
