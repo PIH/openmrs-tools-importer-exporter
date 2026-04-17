@@ -16,7 +16,7 @@ const BATCH_SIZE = 20;
 async function exportAllPatients() {
 
   try {
-    // set the max results to very help results so we don't have to fetch in batches
+    // set the max results to very high results so we don't have to fetch in batches
     await setGlobalProperty(Constants.GP_MAX_RESULTS_ABSOLUTE, "99999", 'SOURCE');
     const globalPropertyAbsolute = await getGlobalProperty(Constants.GP_MAX_RESULTS_ABSOLUTE, 'SOURCE');
     if (globalPropertyAbsolute.value !== "99999") {

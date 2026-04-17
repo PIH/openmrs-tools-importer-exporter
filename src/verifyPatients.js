@@ -7,6 +7,8 @@ import config from './utils/config.js';
 import _ from "lodash"; // Import Lodash for deep object comparison
 import { diffString } from "json-diff";
 import {replaceMappings,sanitizeObject,convertHaiti2016TimesToDaylightSavings} from "./utils/utils.js";
+import {getGlobalProperty, setGlobalProperty} from "./services/openmrsService.js";
+import Constants from "./utils/constants.js";
 
 const USER_MAPPINGS_FILE_PATH = config.EXPORT_USER_MAPPINGS_FILE ? path.join(config.EXPORT_USER_MAPPINGS_FILE) : undefined;
 const userMappings = USER_MAPPINGS_FILE_PATH ? loadMappingFile(USER_MAPPINGS_FILE_PATH) : [];
@@ -36,6 +38,24 @@ async function ensureDirectories() {
 const uuids = loadPatientUuidsFromDir(SUCCESS_DIR);
 
 async function verifyPatients() {
+
+  try {
+    // set the max results to very high results so we don't have to fetch in batches
+    await setGlobalProperty(Constants.GP_MAX_RESULTS_ABSOLUTE, "99999", 'TARGET');
+    const globalPropertyAbsolute = await getGlobalProperty(Constants.GP_MAX_RESULTS_ABSOLUTE, 'TARGET');
+    if (globalPropertyAbsolute.value !== "99999") {
+      throw new Error();
+    }
+    await setGlobalProperty(Constants.GP_MAX_RESULTS_DEFAULT, "99999", 'TARGET');
+    const globalPropertyDefault = await getGlobalProperty(Constants.GP_MAX_RESULTS_DEFAULT, 'TARGET');
+    if (globalPropertyDefault.value !== "99999") {
+      throw new Error();
+    }
+  }
+  catch (err) {
+    throw new Error('Failed to set global properties for max results: ' + err.message);
+  }
+
   try {
     await ensureDirectories(); // Ensure the output directories exist
 
@@ -108,6 +128,22 @@ async function verifyPatients() {
   } catch (error) {
     // Catch unexpected errors
     logger.error('⚠️ Unexpected error occurred while verifying patients:', error);
+  }
+
+  try {
+    await setGlobalProperty(Constants.GP_MAX_RESULTS_ABSOLUTE, Constants.MAX_RESULTS_ABSOLUTE, 'TARGET');
+    const globalPropertyAbsolute = await getGlobalProperty(Constants.GP_MAX_RESULTS_ABSOLUTE, 'TARGET');
+    if (globalPropertyAbsolute.value !== Constants.MAX_RESULTS_ABSOLUTE) {
+      throw new Error();
+    }
+    await setGlobalProperty(Constants.GP_MAX_RESULTS_DEFAULT, Constants.MAX_RESULTS_DEFAULT, 'TARGET');
+    const globalPropertyDefault = await getGlobalProperty(Constants.GP_MAX_RESULTS_DEFAULT, 'TARGET');
+    if (globalPropertyDefault.value !== Constants.MAX_RESULTS_DEFAULT) {
+      throw new Error();
+    }
+  }
+  catch (err) {
+    throw new Error('Failed to re-set global properties for max results: ' + err.message);
   }
 }
 
