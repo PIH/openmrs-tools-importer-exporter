@@ -11,8 +11,17 @@ import {replaceMappings,sanitizeObject,convertHaiti2016TimesToDaylightSavings} f
 const USER_MAPPINGS_FILE_PATH = config.EXPORT_USER_MAPPINGS_FILE ? path.join(config.EXPORT_USER_MAPPINGS_FILE) : undefined;
 const userMappings = USER_MAPPINGS_FILE_PATH ? loadMappingFile(USER_MAPPINGS_FILE_PATH) : [];
 
+const PATIENT_IDENTIFIERS_MAPPINGS_FILE_PATH = config.EXPORT_PATIENT_IDENTIFIERS_MAPPINGS_FILE ? path.join(config.EXPORT_PATIENT_IDENTIFIERS_MAPPINGS_FILE) : undefined;
+const patientIdentifiersMappings = PATIENT_IDENTIFIERS_MAPPINGS_FILE_PATH ? loadMappingFile(PATIENT_IDENTIFIERS_MAPPINGS_FILE_PATH) : [];
+
 const PROVIDER_MAPPINGS_FILE_PATH = config.EXPORT_PROVIDER_MAPPINGS_FILE ? path.join(config.EXPORT_PROVIDER_MAPPINGS_FILE) : undefined;
 const providerMappings = PROVIDER_MAPPINGS_FILE_PATH ? loadMappingFile(PROVIDER_MAPPINGS_FILE_PATH) : [];
+
+const CONCEPT_NAME_MAPPINGS_FILE_PATH = config.EXPORT_CONCEPT_NAME_MAPPINGS_FILE ? path.join(config.EXPORT_CONCEPT_NAME_MAPPINGS_FILE) : undefined;
+const conceptNameMappings = CONCEPT_NAME_MAPPINGS_FILE_PATH ? loadMappingFile(CONCEPT_NAME_MAPPINGS_FILE_PATH) : [];
+
+const WORKFLOW_STATE_MAPPINGS_FILE_PATH = config.EXPORT_PROGRAM_WORKFLOW_STATE_MAPPINGS_FILE ? path.join(config.EXPORT_PROGRAM_WORKFLOW_STATE_MAPPINGS_FILE) : undefined;
+const workflowStateMappings = WORKFLOW_STATE_MAPPINGS_FILE_PATH ? loadMappingFile(WORKFLOW_STATE_MAPPINGS_FILE_PATH) : [];
 
 // Define a batch size
 const BATCH_SIZE = 20;
@@ -59,7 +68,8 @@ async function verifyPatients() {
           }
 
           const fileContents = await fs.readFile(patientFilePath, 'utf-8');
-          let parsedFileContents = JSON.parse(replaceMappings(replaceMappings(fileContents, providerMappings),userMappings));
+          const allMappings = Object.assign({}, providerMappings, userMappings, patientIdentifiersMappings, workflowStateMappings, conceptNameMappings);
+          let parsedFileContents = JSON.parse(replaceMappings(fileContents, allMappings));
 
           // confirm Haiti time zone times from 2016 to Eastern
           if (config.CONVERT_HAITI_2016_DATES_DURING_VERIFICATION) {
