@@ -114,7 +114,15 @@ function parseVisits(results) {
 }
 
 function parseMedicationDispense(results) {
-  return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(results);
+  // we stripped out the metadata that shows version, date created and date updated, because we don't currently support setting these
+  // TODO: that this removes *any* "extension"... right now the only extension the date created
+  const stripped = results.map(entry => {
+    const resource = { ...entry.resource };
+    delete resource.meta;
+    delete resource.extension;
+    return { resource };
+  });
+  return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(stripped);
 }
 
 function parseProgramEnrollments(results) {
