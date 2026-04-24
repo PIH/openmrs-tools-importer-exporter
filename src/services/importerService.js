@@ -1,4 +1,4 @@
-import { postDataIfNotExists } from "./openmrsService.js";
+import {postDataIfNotExists} from "./openmrsService.js";
 import logger from "../utils/logger.js";
 import CONSTANTS from "../utils/constants.js";
 import {generateStrongPassword} from "../utils/utils.js";
@@ -165,6 +165,19 @@ export async function importPatient(record) {
       logger.info(`Imported drug order ${drugOrder.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import drug order: ${err.message}`);
+      if (err.response?.data?.error?.detail) {
+        logger.error(err.response.data.error.detail);
+      }
+      throw err;
+    }
+  }
+
+  for (const medicationDispense of record.medicationDispenses) {
+    try {
+      await postDataIfNotExists(CONSTANTS.TARGET.URLS.MEDICATION_DISPENSE, medicationDispense, medicationDispense.uuid);
+      logger.info(`Imported medication dispense ${medicationDispense.uuid} for patient ${patient.uuid}`);
+    } catch (err) {
+      logger.error(`Failed to import medication dispense: ${err.message}`);
       if (err.response?.data?.error?.detail) {
         logger.error(err.response.data.error.detail);
       }

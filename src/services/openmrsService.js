@@ -25,7 +25,7 @@ function getClient(server) {
   return server === 'TARGET' ? targetClient : sourceClient;
 }
 
-// Helper function to get data from OpenMRS API with Basic Authentication
+// Helper function to get data from OpenMRS REST WS API with Basic Authentication
 export async function fetchData(url, server = 'SOURCE') {
   try {
     const response = await getClient(server).get(url);
@@ -69,6 +69,7 @@ export async function postDataIfNotExists(resourceUrl, data, uuid) {
     }
   }
 }
+
 
 export async function setGlobalProperty(propertyName, propertyValue, server = 'TARGET') {
   await getClient(server).post(`${server === 'TARGET' ? CONSTANTS.TARGET.URLS.GLOBAL_PROPERTY : CONSTANTS.SOURCE.URLS.GLOBAL_PROPERTY}/${propertyName}`, {
