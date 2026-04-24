@@ -1,6 +1,6 @@
 import CONSTANTS from "../utils/constants.js";
 import config from "../utils/config.js";
-import {fetchData, fetchDataUsingFHIR} from "./openmrsService.js";
+import {fetchData} from "./openmrsService.js";
 import {sortByUuid, stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight} from "../utils/utils.js";
 
 export async function exportUser(userUuid, server = 'SOURCE') {
@@ -33,7 +33,7 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
   const obsUrl  = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.OBS : CONSTANTS.SOURCE.URLS.OBS}?patient=${patientUuid}&${CONSTANTS.OBS_CUSTOM_REP}`;
   const testOrdersUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.ORDER : CONSTANTS.SOURCE.URLS.ORDER}?orderTypes=${CONSTANTS.TEST_ORDER_TYPE_UUID},${CONSTANTS.PATHOLOGY_TEST_ORDER_TYPE}&patient=${patientUuid}&${CONSTANTS.TEST_ORDER_CUSTOM_REP}`;
   const drugOrderUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.ORDER : CONSTANTS.SOURCE.URLS.ORDER}?orderTypes=${CONSTANTS.DRUG_ORDER_TYPE_UUID}&patient=${patientUuid}&${CONSTANTS.DRUG_ORDER_CUSTOM_REP}`;
-  const medicationDispenseUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.MEDICATION_DISPENSE : CONSTANTS.SOURCE.URLS.MEDICATION_DISPENSE}?patient=${patientUuid}`;
+  const medicationDispenseUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.MEDICATION_DISPENSE : CONSTANTS.SOURCE.URLS.MEDICATION_DISPENSE}?patient=${patientUuid}&${CONSTANTS.MEDICATION_DISPENSE_CUSTOM_REP}`;
   const patientProgramsUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PROGRAM_ENROLLMENT : CONSTANTS.SOURCE.URLS.PROGRAM_ENROLLMENT}?patient=${patientUuid}&voided=false&${CONSTANTS.PROGRAM_ENROLLMENT_CUSTOM_REP}`;
   const allergiesUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PATIENT : CONSTANTS.SOURCE.URLS.PATIENT}/${patientUuid}/allergy?${CONSTANTS.ALLERGY_CUSTOM_REP}`;
   const [patientData, visitsData, encountersData, obsData, testOrderData, drugOrderData, medicationDispenseData, patientProgramsData, allergiesData] = await Promise.all([
@@ -43,7 +43,7 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
     fetchData(obsUrl, server),
     fetchData(testOrdersUrl, server),
     fetchData(drugOrderUrl, server),
-    fetchDataUsingFHIR(medicationDispenseUrl, server),
+    fetchData(medicationDispenseUrl, server),
     fetchData(patientProgramsUrl, server),
     fetchData(allergiesUrl, server)
   ]);
@@ -55,7 +55,7 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
     obs: parseObsList(obsData ? obsData.results : [], server),   // note that this is only encounterless obs, the majority of the obs will be coming in via the encounter
     testOrders: parseTestOrderList(testOrderData ? testOrderData.results : [], server),
     drugOrders: parseDrugOrderList(drugOrderData ? drugOrderData.results : [], server),
-    medicationDispenses: parseMedicationDispense(medicationDispenseData ? medicationDispenseData.entry : []),
+    medicationDispenses: parseMedicationDispense(medicationDispenseData ? medicationDispenseData.results : []),
     programEnrollments: parseProgramEnrollments(patientProgramsData ? patientProgramsData.results : []),
     allergies: parseAllergies(allergiesData ? allergiesData.results : [])
   };
@@ -114,15 +114,7 @@ function parseVisits(results) {
 }
 
 function parseMedicationDispense(results) {
-  // we stripped out the metadata that shows version, date created and date updated, because we don't currently support setting these
-  // TODO: that this removes *any* "extension"... right now the only extension the date created
-  const stripped = results.map(entry => {
-    const resource = { ...entry.resource };
-    delete resource.meta;
-    delete resource.extension;
-    return { resource };
-  });
-  return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(stripped);
+  return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results));
 }
 
 function parseProgramEnrollments(results) {

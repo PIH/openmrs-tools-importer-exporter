@@ -21,28 +21,9 @@ const targetClient = wrapper(axios.create({
   },
 }));
 
-const sourceClientWithoutSession = axios.create({
-  auth: {
-    username: config.OPENMRS_SOURCE_USERNAME,
-    password: config.OPENMRS_SOURCE_PASSWORD,
-  },
-});
-
-const targetClientWithoutSession = axios.create({
-  auth: {
-    username: config.OPENMRS_TARGET_USERNAME,
-    password: config.OPENMRS_TARGET_PASSWORD,
-  },
-});
-
 function getClient(server) {
   return server === 'TARGET' ? targetClient : sourceClient;
 }
-
-function getClientWithoutSession(server) {
-  return server === 'TARGET' ? targetClientWithoutSession : sourceClientWithoutSession;
-}
-
 
 // Helper function to get data from OpenMRS REST WS API with Basic Authentication
 export async function fetchData(url, server = 'SOURCE') {
@@ -60,23 +41,6 @@ export async function fetchData(url, server = 'SOURCE') {
     throw error;
   }
 }
-
-// Helper function to get data from OpenMRS FHIR2 API with Basic Authentication
-// TODO: figure out why we are having problems using the same session for FHIR and then we can remove the custom "sessionless" clients
-export async function fetchDataUsingFHIR(url, server = 'SOURCE') {
-  try {
-    const response = await getClientWithoutSession(server).get(url);
-    if (typeof response.data === 'string' && response.status !== 204) {  // 204 = no content, is what the allergies endpoint returns if no allergies
-      throw new Error('Bad Response - Unauthenticated?');
-    }
-    return response.data;
-  } catch (error) {
-    // TODO add better error handling for FHIR erros
-    logger.error("Error fetching data from OpenMRS: ", error);
-    throw error;
-  }
-}
-
 
 // Try to GET a resource by UUID; if 404, POST it instead
 // ie, if a resource already exists, we simply skip and move
@@ -106,34 +70,6 @@ export async function postDataIfNotExists(resourceUrl, data, uuid) {
   }
 }
 
-// Try to GET a resource by UUID; if 404, PUT it instead (FHIR API)
-// ie, if a resource already exists, we simply skip and move
-// TODO: figure out why we are having problems using the same session for FHIR and then we can remove the custom "sessionless" clients
-export async function putDataIfNotExistsUsingFHIR(resourceUrl, data, uuid) {
-  const url = `${resourceUrl}/${uuid}`;
-  try {
-    const response = await targetClientWithoutSession.get(url);
-    if (response.data?.id === uuid) {
-      // our script, has currently written, does not overwrite objects that already exist (equality based on uuid)
-      logger.info(`Resource already exists: ${url}`);
-    }
-    if (typeof response?.data === 'string') {
-      throw new Error('Bad Response - Unauthenticated?');
-    }
-  } catch (err) {
-    if (err.response && err.response.status === 404) {
-      const response = await targetClientWithoutSession.put(url, data);
-      if (response.status !== 201) {
-        throw new Error(`Failed to create resource at ${url}, status code: ${response.status}`);
-      }
-      else {
-        logger.info(`Created new resource at ${url}`);
-      }
-    } else {
-      throw err;
-    }
-  }
-}
 
 export async function setGlobalProperty(propertyName, propertyValue, server = 'TARGET') {
   await getClient(server).post(`${server === 'TARGET' ? CONSTANTS.TARGET.URLS.GLOBAL_PROPERTY : CONSTANTS.SOURCE.URLS.GLOBAL_PROPERTY}/${propertyName}`, {

@@ -1,4 +1,4 @@
-import {postDataIfNotExists, putDataIfNotExistsUsingFHIR} from "./openmrsService.js";
+import {postDataIfNotExists} from "./openmrsService.js";
 import logger from "../utils/logger.js";
 import CONSTANTS from "../utils/constants.js";
 import {generateStrongPassword} from "../utils/utils.js";
@@ -174,11 +174,13 @@ export async function importPatient(record) {
 
   for (const medicationDispense of record.medicationDispenses) {
     try {
-      await putDataIfNotExistsUsingFHIR(CONSTANTS.TARGET.URLS.MEDICATION_DISPENSE, medicationDispense.resource, medicationDispense.resource.id);
-      logger.info(`Imported medication dispense ${medicationDispense.resource.id} for patient ${patient.uuid}`);
+      await postDataIfNotExists(CONSTANTS.TARGET.URLS.MEDICATION_DISPENSE, medicationDispense, medicationDispense.uuid);
+      logger.info(`Imported medication dispense ${medicationDispense.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import medication dispense: ${err.message}`);
-      // TODO is there any logging we can do here?
+      if (err.response?.data?.error?.detail) {
+        logger.error(err.response.data.error.detail);
+      }
       throw err;
     }
   }
