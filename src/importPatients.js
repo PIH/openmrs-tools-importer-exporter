@@ -26,8 +26,9 @@ const conceptNameMappings = CONCEPT_NAME_MAPPINGS_FILE_PATH ? loadMappingFile(CO
 
 const WORKFLOW_STATE_MAPPINGS_FILE_PATH = config.EXPORT_PROGRAM_WORKFLOW_STATE_MAPPINGS_FILE ? path.join(config.EXPORT_PROGRAM_WORKFLOW_STATE_MAPPINGS_FILE) : undefined;
 const workflowStateMappings = WORKFLOW_STATE_MAPPINGS_FILE_PATH ? loadMappingFile(WORKFLOW_STATE_MAPPINGS_FILE_PATH) : [];
-// Define a batch size
 const BATCH_SIZE = config.IMPORT_PATIENTS_BATCH_SIZE ? parseInt(config.IMPORT_PATIENTS_BATCH_SIZE, 10) : 1;
+const RETRY_MAX = config.IMPORT_PATIENTS_RETRY_MAX ? parseInt(config.IMPORT_PATIENTS_RETRY_MAX, 10) : 3;
+const RETRY_DELAY_MS = config.IMPORT_PATIENTS_RETRY_DELAY_MS ? parseInt(config.IMPORT_PATIENTS_RETRY_DELAY_MS, 10) : 2000;
 
 async function importAllPatients() {
   try {
@@ -53,20 +54,35 @@ async function importAllPatients() {
     throw new Error('Failed to set necessary global properties: ' + err.message);
   }
 
+  const overallStart = Date.now();
+
   try {
     // Read all files in the target directory
     const files = (await fs.readdir(TARGET_DIR)).filter(f => f.endsWith('_patient.json'));
+    const totalFiles = files.length;
+
+    logger.info(`Starting import of ${totalFiles} patient files with batch size ${BATCH_SIZE}.`);
 
     // Divide files into chunks/batches
     const fileBatches = chunkArray(files, BATCH_SIZE);
 
+    let processedCount = 0;
+
     // Process each batch sequentially
-    for (const batch of fileBatches) {
-      logger.info(`Processing a batch of ${batch.length} files.`);
+    for (let i = 0; i < fileBatches.length; i++) {
+      const batch = fileBatches[i];
+      const batchStart = Date.now();
+      logger.info(`Processing batch ${i + 1}/${fileBatches.length} (${batch.length} files).`);
       await Promise.all(batch.map(file => processFile(file)));
+      const batchElapsed = ((Date.now() - batchStart) / 1000).toFixed(2);
+      processedCount += batch.length;
+      const throughput = (batch.length / (batchElapsed || 1)).toFixed(2);
+      logger.info(`Batch ${i + 1} complete: ${batch.length} patients in ${batchElapsed}s (${throughput} patients/s). Total processed: ${processedCount}/${totalFiles}.`);
     }
 
-    logger.info(`All files processed.`);
+    const totalElapsed = ((Date.now() - overallStart) / 1000).toFixed(2);
+    const overallThroughput = (totalFiles / (totalElapsed || 1)).toFixed(2);
+    logger.info(`All ${totalFiles} files processed in ${totalElapsed}s (${overallThroughput} patients/s avg) with batch size ${BATCH_SIZE}.`);
   } catch (err) {
     logger.error(`Error during processing: ${err.message}`);
   }
@@ -96,7 +112,7 @@ async function importAllPatients() {
 }
 
 // Helper function to process a single file
-async function processFile(file) {
+async function processFile(file, retryCount = 0) {
   const filePath = path.join(TARGET_DIR, file);
   try {
     const content = await fs.readFile(filePath, 'utf8');
@@ -112,10 +128,28 @@ async function processFile(file) {
     await moveFile(filePath, SUCCESS_DIR);
     logger.info(`File ${file} successfully moved to ${SUCCESS_DIR}`);
   } catch (err) {
+    if (isTransientError(err) && retryCount < RETRY_MAX) {
+      logger.warn(`TransientPropertyValueException for ${file}, retrying in ${RETRY_DELAY_MS}ms (attempt ${retryCount + 1}/${RETRY_MAX})...`);
+      await delay(RETRY_DELAY_MS);
+      return processFile(file, retryCount + 1);
+    }
     logger.error(`Error processing file ${file}: ${err.message}`);
     await moveFile(filePath, FAILED_DIR);
     logger.info(`File ${file} moved to ${FAILED_DIR} due to errors.`);
   }
+}
+
+function isTransientError(err) {
+  const detail = err.response?.data?.error?.detail ?? '';
+  const message = err.message ?? '';
+  return (
+    detail.includes('TransientPropertyValueException') || message.includes('TransientPropertyValueException') ||
+    detail.includes('ConstraintViolationException') || message.includes('ConstraintViolationException')
+  );
+}
+
+function delay(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
 }
 
 // Helper function to chunk an array into smaller batches
