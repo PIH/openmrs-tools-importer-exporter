@@ -47,7 +47,7 @@ export function trimNonAlphanumeric(str) {
 }
 
 // Recursively decodes HTML entities in all string values of an object.
-// &amp; must be decoded first so that double-encoded values like &amp;gt; → &gt; → >
+// &amp; must be decoded first to handle any double-encoded values like &amp;gt; → &gt; → >
 export function decodeHtmlEntitiesInObject(obj) {
   if (Array.isArray(obj)) {
     return obj.map(decodeHtmlEntitiesInObject);
