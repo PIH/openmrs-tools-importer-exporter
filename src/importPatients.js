@@ -6,7 +6,7 @@ import { importPatient } from './services/importerService.js';
 import {loadMappingFile, moveFile} from './services/fileService.js';
 import { getGlobalProperty, setGlobalProperty } from "./services/openmrsService.js";
 import Constants from "./utils/constants.js";
-import {replaceMappings} from "./utils/utils.js";
+import {replaceMappings, decodeHtmlEntitiesInObject} from "./utils/utils.js";
 
 const TARGET_DIR = config.TARGET_DIR;
 const SUCCESS_DIR = path.join(TARGET_DIR, 'successful');
@@ -103,7 +103,7 @@ async function processFile(file) {
     // replace any mappings
     const allMappings = Object.assign({}, providerMappings, userMappings, patientIdentifiersMappings, workflowStateMappings, conceptNameMappings);
     const updatedContent = replaceMappings(content, allMappings);
-    const patientRecord = JSON.parse(updatedContent);
+    const patientRecord = decodeHtmlEntitiesInObject(JSON.parse(updatedContent));
 
     // Import record
     await importPatient(patientRecord)

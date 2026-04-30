@@ -4,7 +4,7 @@ import config from './utils/config.js';
 import logger from './utils/logger.js';
 import {importPerson} from './services/importerService.js';
 import {loadMappingFile, moveFile} from './services/fileService.js';
-import {replaceMappings} from "./utils/utils.js";
+import {replaceMappings, decodeHtmlEntitiesInObject} from "./utils/utils.js";
 
 const TARGET_DIR = config.TARGET_DIR;
 const SUCCESS_DIR = path.join(TARGET_DIR, 'successful');
@@ -43,7 +43,7 @@ async function processFile(file) {
         const content = await fs.readFile(filePath, 'utf8');
         // replace any user mappings
         const updatedContent = replaceMappings(content, userMappings);
-        const personRecord = JSON.parse(updatedContent);
+        const personRecord = decodeHtmlEntitiesInObject(JSON.parse(updatedContent));
 
         // Import record
         await importPerson(personRecord)
