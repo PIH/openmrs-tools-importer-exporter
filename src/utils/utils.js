@@ -97,7 +97,11 @@ export function sanitizeObject(obj)  {
     }, {});
   } else if (typeof obj === "string") {
     // Trim strings, collapse whitespace, and standardize greater than and less than
-    return obj.trim().replace(/\s+/g, " ").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    return obj.trim()
+      .replace(/\s+/g, " ")
+      .replace(/&(?!amp;)/g, "&amp;")
+      .replace(/</g,"&lt;")
+      .replace(/>/g,"&gt;");
   }
   return obj; // Return non-object, non-string values as-is
 }
