@@ -46,6 +46,26 @@ export function trimNonAlphanumeric(str) {
     return str;
 }
 
+// Recursively decodes HTML entities in all string values of an object.
+// &amp; must be decoded first to handle any double-encoded values like &amp;gt; → &gt; → >
+export function decodeHtmlEntitiesInObject(obj) {
+  if (Array.isArray(obj)) {
+    return obj.map(decodeHtmlEntitiesInObject);
+  } else if (typeof obj === "object" && obj !== null) {
+    return Object.fromEntries(
+      Object.entries(obj).map(([key, value]) => [key, decodeHtmlEntitiesInObject(value)])
+    );
+  } else if (typeof obj === "string") {
+    return obj
+      .replace(/&amp;/g, "&")
+      .replace(/&lt;/g, "<")
+      .replace(/&gt;/g, ">")
+      .replace(/&quot;/g, '"')
+      .replace(/&apos;/g, "'");
+  }
+  return obj;
+}
+
 // Utility to recursively sanitize JSON objects
 // - Removes unnecessary whitespace from strings
 // - Provides consistent structure for comparison purposes
@@ -77,7 +97,7 @@ export function sanitizeObject(obj)  {
     }, {});
   } else if (typeof obj === "string") {
     // Trim strings, collapse whitespace, and standardize greater than and less than
-    return obj.trim().replace(/\s+/g, " ").replace("<","&lt;").replace(">","&gt;");
+    return obj.trim().replace(/\s+/g, " ").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   }
   return obj; // Return non-object, non-string values as-is
 }
