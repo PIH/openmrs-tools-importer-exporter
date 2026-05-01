@@ -99,7 +99,7 @@ export function sanitizeObject(obj)  {
     // Trim strings, collapse whitespace, and standardize greater than and less than
     return obj.trim()
       .replace(/\s+/g, " ")
-      .replace(/&(?!amp;)/g, "&amp;")
+      .replace(/&(?!amp;|lt;|gt;)/g, "&amp;")
       .replace(/</g,"&lt;")
       .replace(/>/g,"&gt;");
   }
