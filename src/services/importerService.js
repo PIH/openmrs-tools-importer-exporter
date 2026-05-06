@@ -20,7 +20,7 @@ export async function importUser(user) {
       return;
     }
 
-    logger.error(`Failed to import user: ${err.message}`);
+    logger.error(`Failed to import user ${user.uuid}: ${err.message}`);
     if (err.response?.data?.error?.detail) {
       logger.error(err.response.data.error.detail);
     }
@@ -35,7 +35,7 @@ export async function importProvider(provider) {
   try {
     await postDataIfNotExists(CONSTANTS.TARGET.URLS.PROVIDER, provider, provider.uuid);
   } catch (err) {
-    logger.error(`Failed to import provider: ${err.message}`);
+    logger.error(`Failed to import provider ${provider.uuid}: ${err.message}`);
     if (err.response?.data?.error?.detail) {
       logger.error(err.response.data.error.detail);
     }
@@ -50,7 +50,7 @@ export async function importRelationship(relationship) {
   try {
     await postDataIfNotExists(CONSTANTS.TARGET.URLS.RELATIONSHIP, relationship, relationship.uuid);
   } catch (err) {
-    logger.error(`Failed to import relationship: ${err.message}`);
+    logger.error(`Failed to import relationship ${relationship.uuid}: ${err.message}`);
     if (err.response?.data?.error?.detail) {
       logger.error(err.response.data.error.detail);
     }
@@ -64,7 +64,7 @@ export async function importPerson(person) {
     try {
         await postDataIfNotExists(CONSTANTS.TARGET.URLS.PERSON, person, person.uuid);
     } catch (err) {
-        logger.error(`Failed to import person: ${err.message}`);
+        logger.error(`Failed to import person ${person.uuid}: ${err.message}`);
         if (err.response?.data?.error?.detail) {
             logger.error(err.response.data.error.detail);
         }
@@ -88,7 +88,7 @@ export async function importPatient(record) {
   try {
     await postDataIfNotExists(CONSTANTS.TARGET.URLS.PATIENT, patient, patient.uuid);
   } catch (err) {
-    logger.error(`Failed to import patient: ${err.message}`);
+    logger.error(`Failed to import patient ${patient.uuid}: ${err.message}`);
     if (err.response?.data?.error?.detail) {
       logger.error(err.response.data.error.detail);
     }
@@ -103,7 +103,7 @@ export async function importPatient(record) {
       await postDataIfNotExists(CONSTANTS.TARGET.URLS.VISIT, visit, visit.uuid);
       logger.info(`Imported visit ${visit.uuid} for patient ${patient.uuid}`);
     } catch (err) {
-      logger.error(`Failed to import visit: ${err.message}`);
+      logger.error(`Failed to import visit ${visit.uuid}: ${err.message}`);
       if (err.response?.data?.error?.detail) {
         logger.error(err.response.data.error.detail);
       }
@@ -119,7 +119,7 @@ export async function importPatient(record) {
       await postDataIfNotExists(CONSTANTS.TARGET.URLS.ENCOUNTER, encounter, encounter.uuid);
       logger.info(`Imported encounter ${encounter.uuid} for patient ${patient.uuid}`);
     } catch (err) {
-      logger.error(`Failed to import encounter: ${err.message}`);
+      logger.error(`Failed to import encounter ${encounter.uuid}: ${err.message}`);
       if (err.response?.data?.error?.detail) {
         logger.error(err.response.data.error.detail);
       }
@@ -135,7 +135,7 @@ export async function importPatient(record) {
       await postDataIfNotExists(CONSTANTS.TARGET.URLS.OBS, obs, obs.uuid);
       logger.info(`Imported obs ${obs.uuid} for patient ${patient.uuid}`);
     } catch (err) {
-      logger.error(`Failed to import obs: ${err.message}`);
+      logger.error(`Failed to import obs ${obs.uuid}: ${err.message}`);
       if (err.response?.data?.error?.detail) {
         logger.error(err.response.data.error.detail);
       }
@@ -151,7 +151,7 @@ export async function importPatient(record) {
       await postDataIfNotExists(CONSTANTS.TARGET.URLS.ORDER, testOrder, testOrder.uuid);
       logger.info(`Imported test order ${testOrder.uuid} for patient ${patient.uuid}`);
     } catch (err) {
-      logger.error(`Failed to import test order: ${err.message}`);
+      logger.error(`Failed to import test order ${testOrder.uuid}: ${err.message}`);
       if (err.response?.data?.error?.detail) {
         logger.error(err.response.data.error.detail);
       }
@@ -164,7 +164,7 @@ export async function importPatient(record) {
       await postDataIfNotExists(CONSTANTS.TARGET.URLS.ORDER, drugOrder, drugOrder.uuid);
       logger.info(`Imported drug order ${drugOrder.uuid} for patient ${patient.uuid}`);
     } catch (err) {
-      logger.error(`Failed to import drug order: ${err.message}`);
+      logger.error(`Failed to import drug order ${drugOrder.uuid}: ${err.message}`);
       if (err.response?.data?.error?.detail) {
         logger.error(err.response.data.error.detail);
       }
@@ -177,7 +177,7 @@ export async function importPatient(record) {
       await postDataIfNotExists(CONSTANTS.TARGET.URLS.MEDICATION_DISPENSE, medicationDispense, medicationDispense.uuid);
       logger.info(`Imported medication dispense ${medicationDispense.uuid} for patient ${patient.uuid}`);
     } catch (err) {
-      logger.error(`Failed to import medication dispense: ${err.message}`);
+      logger.error(`Failed to import medication dispense ${medicationDispense.uuid}: ${err.message}`);
       if (err.response?.data?.error?.detail) {
         logger.error(err.response.data.error.detail);
       }
@@ -195,7 +195,7 @@ export async function importPatient(record) {
       await postDataIfNotExists(CONSTANTS.TARGET.URLS.PROGRAM_ENROLLMENT, programEnrollment, programEnrollment.uuid);
       logger.info(`Imported program enrollment ${programEnrollment.uuid} for patient ${patient.uuid}`);
     } catch (err) {
-      logger.error(`Failed to import program enrollment: ${err.message}`);
+      logger.error(`Failed to import program enrollment ${programEnrollment.uuid}: ${err.message}`);
       if (err.response?.data?.error?.detail) {
         logger.error(err.response.data.error.detail);
       }
@@ -208,7 +208,7 @@ export async function importPatient(record) {
           await postDataIfNotExists(`${CONSTANTS.TARGET.URLS.PROGRAM_ENROLLMENT}/${programEnrollment.uuid}/state`, state, state.uuid);
           logger.info(`Imported patient state ${state.uuid} for program ${programEnrollment.uuid}`);
         } catch (err) {
-          logger.error(`Failed to import patient state: ${err.message}`);
+          logger.error(`Failed to import patient state ${state.uuid}: ${err.message}`);
           if (err.response?.data?.error?.detail) {
             logger.error(err.response.data.error.detail);
           }
@@ -223,7 +223,7 @@ export async function importPatient(record) {
       await postDataIfNotExists(`${CONSTANTS.TARGET.URLS.PATIENT}/${patient.uuid}/allergy`, allergy, allergy.uuid);
       logger.info(`Imported allergy ${allergy.uuid} for patient ${patient.uuid}`);
     } catch (err) {
-      logger.error(`Failed to import allergy: ${err.message}`);
+      logger.error(`Failed to import allergy ${allergy.uuid}: ${err.message}`);
       if (err.response?.data?.error?.detail) {
         logger.error(err.response.data.error.detail);
       }
