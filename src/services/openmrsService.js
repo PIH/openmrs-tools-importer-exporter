@@ -71,6 +71,11 @@ export async function postDataIfNotExists(resourceUrl, data, uuid) {
 }
 
 
+export async function postData(resourceUrl, data) {
+  const response = await targetClient.post(resourceUrl, data);
+  return response.data;
+}
+
 export async function setGlobalProperty(propertyName, propertyValue, server = 'TARGET') {
   await getClient(server).post(`${server === 'TARGET' ? CONSTANTS.TARGET.URLS.GLOBAL_PROPERTY : CONSTANTS.SOURCE.URLS.GLOBAL_PROPERTY}/${propertyName}`, {
     value: propertyValue,
