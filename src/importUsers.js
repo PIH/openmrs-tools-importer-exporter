@@ -32,9 +32,9 @@ const BATCH_SIZE = 1;
  *        - if OPENMRS_SOURCE_FACILITY_UUID is set, appends that uuid to the existing user's "allowedVisitLocations"
  *          userProperty on the target system (creating the property if it does not already exist)
  *      - otherwise, it searches for an existing user with the same uuid in the target system
- *        - if an existing user is found, it does not import, and the moves file to "successful" directory
+ *        - if an existing user is found, it does not import, and moves the file to "successful" directory
  *      - otherwise, it creates a new, random password for this user, and attempts to post the user to the target system
- *        - if OPENMRS_SOURCE_FACILITY_UUID is set, sets the user's "allowedVisitLocations" userProperty to that uuid
+ *        - (if OPENMRS_SOURCE_FACILITY_UUID is set, before posting it adds an "allowedVisitLocations" userProperty to the json representation of the user, setting it to OPENMRS_SOURCE_FACILITY_UUID)
  *        - if successful, it moves the file to "successful" directory (note that a new system-id will be generated)
  *        - if failed, and error message contains "Username admin or system id admin is already in use", it skips and moves the user to "already_exists"
  *        - otherwise, move to the "failed" directory
