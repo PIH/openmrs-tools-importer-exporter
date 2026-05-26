@@ -5,11 +5,15 @@ import logger from './utils/logger.js';
 import { importUser } from './services/importerService.js';
 import {loadMappingFile, moveFile} from './services/fileService.js';
 import {replaceMappings, decodeHtmlEntitiesInObject} from "./utils/utils.js";
+import {fetchData, postData} from "./services/openmrsService.js";
+import CONSTANTS from "./utils/constants.js";
 
 const TARGET_DIR = config.TARGET_DIR;
 const SUCCESS_DIR = path.join(TARGET_DIR, 'successful');
 const FAILED_DIR = path.join(TARGET_DIR, 'failed');
 const MAPPED_TO_EXISTING_DIR = path.join(TARGET_DIR, 'mapped_to_existing');
+
+const SOURCE_FACILITY_UUID = config.OPENMRS_SOURCE_FACILITY_UUID;
 
 const USER_MAPPINGS_FILE_PATH = config.EXPORT_USER_MAPPINGS_FILE ? path.join(config.EXPORT_USER_MAPPINGS_FILE) : undefined;
 const userMappings = USER_MAPPINGS_FILE_PATH ? loadMappingFile(USER_MAPPINGS_FILE_PATH) : [];
@@ -25,9 +29,12 @@ const BATCH_SIZE = 1;
  *    - it loads any "user mapping" file that may exist
  *    - it loads all files in the target directory in the format ${uuid}_user.json and processes each file:
  *      - if the uuid is in the user mapping files, it skips that file and moves it to the "mapped_to_existing" directory
+ *        - if OPENMRS_SOURCE_FACILITY_UUID is set, appends that uuid to the existing user's "allowedVisitLocations"
+ *          userProperty on the target system (creating the property if it does not already exist)
  *      - otherwise, it searches for an existing user with the same uuid in the target system
  *        - if an existing user is found, it does not import, and the moves file to "successful" directory
- *      - otherwise, it a creates new, random password for this user, and attempts to post the user to the target system
+ *      - otherwise, it creates a new, random password for this user, and attempts to post the user to the target system
+ *        - if OPENMRS_SOURCE_FACILITY_UUID is set, sets the user's "allowedVisitLocations" userProperty to that uuid
  *        - if successful, it moves the file to "successful" directory (note that a new system-id will be generated)
  *        - if failed, and error message contains "Username admin or system id admin is already in use", it skips and moves the user to "already_exists"
  *        - otherwise, move to the "failed" directory
@@ -71,6 +78,9 @@ async function processFile(file) {
 
     if (uuid in userMappings) {
       logger.info(`User ${uuid} in mapping file, skipping`)
+      if (SOURCE_FACILITY_UUID) {
+        await appendAllowedVisitLocation(userMappings[uuid], SOURCE_FACILITY_UUID);
+      }
       await moveFile(filePath, MAPPED_TO_EXISTING_DIR);
       logger.info(`File ${file} successfully moved to ${MAPPED_TO_EXISTING_DIR}`);
       return;
@@ -80,6 +90,11 @@ async function processFile(file) {
     let updatedContent = replaceMappings(content,userRoleMappings);
     updatedContent = replaceMappings(updatedContent,userMappings);
     const user = decodeHtmlEntitiesInObject(JSON.parse(updatedContent));
+
+    if (SOURCE_FACILITY_UUID) {
+      user.userProperties = user.userProperties || {};
+      user.userProperties.allowedVisitLocations = SOURCE_FACILITY_UUID;
+    }
 
     // Import record
     await importUser(user)
@@ -92,6 +107,16 @@ async function processFile(file) {
     await moveFile(filePath, FAILED_DIR);
     logger.info(`File ${file} moved to ${FAILED_DIR} due to errors.`);
   }
+}
+
+async function appendAllowedVisitLocation(targetUuid, facilityUuid) {
+  const user = await fetchData(`${CONSTANTS.TARGET.URLS.USER}/${targetUuid}`, 'TARGET');
+  const existing = user.userProperties?.allowedVisitLocations;
+  const updated = existing ? `${existing},${facilityUuid}` : facilityUuid;
+  await postData(`${CONSTANTS.TARGET.URLS.USER}/${targetUuid}`, {
+    userProperties: { ...user.userProperties, allowedVisitLocations: updated }
+  });
+  logger.info(`Updated allowedVisitLocations for user ${targetUuid} to: ${updated}`);
 }
 
 // Helper function to chunk an array into smaller batches
