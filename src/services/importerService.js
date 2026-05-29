@@ -2,6 +2,7 @@ import {postDataIfNotExists} from "./openmrsService.js";
 import logger from "../utils/logger.js";
 import CONSTANTS from "../utils/constants.js";
 import {generateStrongPassword} from "../utils/utils.js";
+import config from "../utils/config.js";
 
 const alreadyInUseRegex = /Username \S+ or system id \S+ is already in use/;
 
@@ -84,6 +85,17 @@ export async function importPatient(record) {
   patient.personCreator = patient.person?.creator;
   patient.personDateChanged = patient.person?.dateChanged;
   patient.personChangedBy = patient.person?.changedBy;
+
+  // add Health Center person attribute if configured
+  if (config.OPENMRS_HEALTH_CENTER_ATTRIBUTE_UUID && config.OPENMRS_SOURCE_FACILITY_UUID) {
+    if (!patient.person.attributes) {
+      patient.person.attributes = [];
+    }
+    patient.person.attributes.push({
+      attributeType: { uuid: config.OPENMRS_HEALTH_CENTER_ATTRIBUTE_UUID },
+      value: config.OPENMRS_SOURCE_FACILITY_UUID,
+    });
+  }
 
   try {
     await postDataIfNotExists(CONSTANTS.TARGET.URLS.PATIENT, patient, patient.uuid);

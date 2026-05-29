@@ -75,6 +75,14 @@ async function verifyPatients() {
           // Fetch remote patient record
           const patientRecord = await exportPatient(uuid, 'TARGET');
 
+          // Remove the Health Center attribute — it's added programmatically during import
+          // and is not present in the original exported JSON files
+          if (config.OPENMRS_HEALTH_CENTER_ATTRIBUTE_UUID && patientRecord.patient?.person?.attributes) {
+            patientRecord.patient.person.attributes = patientRecord.patient.person.attributes.filter(
+              attr => attr.attributeType?.uuid !== config.OPENMRS_HEALTH_CENTER_ATTRIBUTE_UUID
+            );
+          }
+
           // Compare with file contents
           const patientFilePath = path.join(SUCCESS_DIR, `${uuid}_patient.json`);
           const fileExists = await fs
