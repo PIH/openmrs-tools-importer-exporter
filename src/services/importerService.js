@@ -1,10 +1,37 @@
 import {postDataIfNotExists} from "./openmrsService.js";
-import logger from "../utils/logger.js";
+import logger, {duplicateIdentifierLogger} from "../utils/logger.js";
 import CONSTANTS from "../utils/constants.js";
 import {generateStrongPassword} from "../utils/utils.js";
 import config from "../utils/config.js";
 
 const alreadyInUseRegex = /Username \S+ or system id \S+ is already in use/;
+const duplicateIdentifierRegex = /^Identifier (\S+) already in use by another patient$/;
+
+// Scans an OpenMRS "identifier already in use" error for the offending identifier value, or returns null
+function extractDuplicateIdentifier(err) {
+  const globalErrors = err.response?.data?.error?.globalErrors;
+  if (!globalErrors) {
+    return null;
+  }
+  for (const globalError of globalErrors) {
+    const match = duplicateIdentifierRegex.exec(globalError.message ?? globalError.code ?? "");
+    if (match) {
+      return match[1];
+    }
+  }
+  return null;
+}
+
+function logDuplicateIdentifier(patient, identifierEntry) {
+  const zlEmrIdEntry = patient.identifiers?.find(
+    (i) => i.identifierType?.uuid === CONSTANTS.ZL_EMR_PATIENT_IDENTIFIER_TYPE_UUID
+  );
+  const zlEmrId = zlEmrIdEntry?.identifier ?? patient.uuid;
+  const identifierType = identifierEntry.identifierType?.display ?? identifierEntry.identifierType?.uuid;
+  const message = `Patient ${zlEmrId} has duplicate identifier ${identifierEntry.identifier} of type ${identifierType}. Converting to DPL-${identifierEntry.identifier} and importing`;
+  duplicateIdentifierLogger.info(message);
+  logger.warn(message);
+}
 
 export async function importUser(user) {
 
@@ -102,17 +129,31 @@ export async function importPatient(record) {
     }
   }
 
-  try {
-    await postDataIfNotExists(CONSTANTS.TARGET.URLS.PATIENT, patient, patient.uuid);
-  } catch (err) {
-    logger.error(`Failed to import patient ${patient.uuid}: ${err.message}`);
-    if (err.response?.data?.error?.detail) {
-      logger.error(err.response.data.error.detail);
-    }
-    if(err.response?.data?.error?.globalErrors) {
-        logger.error(JSON.stringify(err.response.data.error.globalErrors));
-    }
+  let retriedDuplicateIdentifier = false;
+  while (true) {
+    try {
+      await postDataIfNotExists(CONSTANTS.TARGET.URLS.PATIENT, patient, patient.uuid);
+      break;
+    } catch (err) {
+      // if this is a "duplicate identifier" error, append the identifier with "DPL-" and try again
+      const duplicateIdentifier = !retriedDuplicateIdentifier && extractDuplicateIdentifier(err);
+      const identifierEntry = duplicateIdentifier && patient.identifiers?.find((i) => i.identifier === duplicateIdentifier);
+      if (identifierEntry) {
+        retriedDuplicateIdentifier = true;
+        logDuplicateIdentifier(patient, identifierEntry);
+        identifierEntry.identifier = `DPL-${identifierEntry.identifier}`;
+        continue;
+      }
+
+      logger.error(`Failed to import patient ${patient.uuid}: ${err.message}`);
+      if (err.response?.data?.error?.detail) {
+        logger.error(err.response.data.error.detail);
+      }
+      if(err.response?.data?.error?.globalErrors) {
+          logger.error(JSON.stringify(err.response.data.error.globalErrors));
+      }
       throw err;
+    }
   }
 
   for (const visit of record.visits) {

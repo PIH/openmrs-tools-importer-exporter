@@ -1,5 +1,7 @@
 // logger.js
 import { createLogger, format, transports } from 'winston';
+import path from 'path';
+import config from './config.js';
 
 const logger = createLogger({
   level: 'info',
@@ -11,7 +13,15 @@ const logger = createLogger({
   ),
   transports: [
     new transports.Console(),
-    new transports.File({ filename: 'logs/app.log' })
+    new transports.File({ filename: path.join(config.LOG_HOME, 'app.log') })
+  ]
+});
+
+export const duplicateIdentifierLogger = createLogger({
+  level: 'info',
+  format: format.printf(({ message }) => message),
+  transports: [
+    new transports.File({ filename: path.join(config.LOG_HOME, 'duplicate-identifiers.log') })
   ]
 });
 

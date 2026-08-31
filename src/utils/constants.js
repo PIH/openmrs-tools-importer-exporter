@@ -53,7 +53,7 @@ export default {
     }
   },
   PERSON_CUSTOM_REP: `v=custom:${PERSON_REP}`,
-  PATIENT_CUSTOM_REP: `v=custom:(uuid,display,identifiers:(uuid,identifier,location:(uuid),identifierType:(uuid),preferred,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),person:${PERSON_REP})`,
+  PATIENT_CUSTOM_REP: `v=custom:(uuid,display,identifiers:(uuid,identifier,location:(uuid),identifierType:(uuid,display),preferred,dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),person:${PERSON_REP})`,
   VISIT_CUSTOM_REP: `v=custom:(uuid,patient:(uuid),attributes:(uuid,value,attributeType:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),startDatetime,stopDatetime,indication:(uuid),location:(uuid),visitType:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid))`,
   ENCOUNTER_CUSTOM_REP: `v=custom:(uuid,patient:(uuid),location:(uuid),encounterType:(uuid),form:(uuid),visit:(uuid),encounterDatetime,encounterProviders:(provider:(uuid),encounterRole:(uuid),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid)),dateCreated,creator:(uuid),dateChanged,changedBy:(uuid),obs:${OBS_REP})`,
   OBS_CUSTOM_REP: `v=custom:${OBS_REP}`,
@@ -75,5 +75,6 @@ export default {
   DRUG_ORDER_TYPE_UUID: "131168f4-15f5-102d-96e4-000c29c2a5d7",
   TEST_ORDER_TYPE_UUID:"52a447d3-a64a-11e3-9aeb-50e549534c5e",
   TEST_ORDER_NUMBER_CONCEPT_UUID: "393dec41-2fb5-428f-acfa-36ea85da6666",
-  PATHOLOGY_TEST_ORDER_TYPE: "65c912c2-88cf-46c2-83ae-2b03b1f97d3a"
+  PATHOLOGY_TEST_ORDER_TYPE: "65c912c2-88cf-46c2-83ae-2b03b1f97d3a",
+  ZL_EMR_PATIENT_IDENTIFIER_TYPE_UUID: "a541af1e-105c-40bf-b345-ba1fd6a59b85"
 };

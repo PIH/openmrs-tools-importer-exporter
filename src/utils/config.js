@@ -33,6 +33,7 @@ const config = {
   REDCAP_EXPORT_FILE: process.env.REDCAP_EXPORT_FILE,
   REDCAP_ADDRESSES_MAPPING_FILE: process.env.REDCAP_ADDRESSES_MAPPING_FILE,
   REDCAP_RECORDS_WITH_NO_DOB_DIR: process.env.REDCAP_RECORDS_WITH_NO_DOB_DIR,
+  LOG_HOME: process.env.LOG_HOME || 'logs',
 }
 
 export default config;

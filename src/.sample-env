@@ -19,3 +19,4 @@ EXPORT_PROVIDER_MAPPINGS_FILE=/tmp/provider-mappings.csv
 EXPORT_CONCEPT_NAME_MAPPINGS_FILE=/tmp/concept-name-mappings.csv
 EXPORT_PROGRAM_WORKFLOW_STATE_MAPPINGS_FILE=/tmp/program-workflow-state-mappings.csv
 TARGET_DIR=/tmp
+LOG_HOME=logs
