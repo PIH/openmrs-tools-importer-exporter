@@ -30,6 +30,8 @@ const BATCH_SIZE = config.IMPORT_PATIENTS_BATCH_SIZE ? parseInt(config.IMPORT_PA
 const RETRY_MAX = config.IMPORT_PATIENTS_RETRY_MAX ? parseInt(config.IMPORT_PATIENTS_RETRY_MAX, 10) : 3;
 const RETRY_DELAY_MS = config.IMPORT_PATIENTS_RETRY_DELAY_MS ? parseInt(config.IMPORT_PATIENTS_RETRY_DELAY_MS, 10) : 2000;
 
+let restoreDrugOrderRequireOutpatientQuantity = false;
+
 async function importAllPatients() {
   try {
     // disable the visit assignment handler so that we don't manipulate encounters when saving
@@ -48,6 +50,16 @@ async function importAllPatients() {
     const globalPropertyIgnoreAttemptsToStopInactiveOrders = await getGlobalProperty(Constants.GP_IGNORE_ATTEMPTS_TO_STOP_INACTIVE_ORDERS, 'TARGET');
     if (globalPropertyIgnoreAttemptsToStopInactiveOrders.value !== 'true') {
       throw new Error();
+    }
+    // if outpatient quantity is currently required on drug orders, disable it for the import so as not to block previous orders placed when it could be null
+    const globalPropertyDrugOrderRequireOutpatientQuantity = await getGlobalProperty(Constants.GP_DRUG_ORDER_REQUIRE_OUTPATIENT_QUANTITY, 'TARGET');
+    if (globalPropertyDrugOrderRequireOutpatientQuantity.value === 'true') {
+      await setGlobalProperty(Constants.GP_DRUG_ORDER_REQUIRE_OUTPATIENT_QUANTITY, false, 'TARGET');
+      const updatedGlobalPropertyDrugOrderRequireOutpatientQuantity = await getGlobalProperty(Constants.GP_DRUG_ORDER_REQUIRE_OUTPATIENT_QUANTITY, 'TARGET');
+      if (updatedGlobalPropertyDrugOrderRequireOutpatientQuantity.value !== 'false') {
+        throw new Error();
+      }
+      restoreDrugOrderRequireOutpatientQuantity = true;
     }
   }
   catch (err) {
@@ -104,6 +116,14 @@ async function importAllPatients() {
     const globalPropertyIgnoreAttemptsToStopInactiveOrders = await getGlobalProperty(Constants.GP_IGNORE_ATTEMPTS_TO_STOP_INACTIVE_ORDERS, 'TARGET');
     if (globalPropertyIgnoreAttemptsToStopInactiveOrders.value !== 'false') {
       throw new Error();
+    }
+    // restore outpatient quantity requirement on drug orders if it was enabled before the import
+    if (restoreDrugOrderRequireOutpatientQuantity) {
+      await setGlobalProperty(Constants.GP_DRUG_ORDER_REQUIRE_OUTPATIENT_QUANTITY, true, 'TARGET');
+      const globalPropertyDrugOrderRequireOutpatientQuantity = await getGlobalProperty(Constants.GP_DRUG_ORDER_REQUIRE_OUTPATIENT_QUANTITY, 'TARGET');
+      if (globalPropertyDrugOrderRequireOutpatientQuantity.value !== 'true') {
+        throw new Error();
+      }
     }
   }
   catch (err) {
