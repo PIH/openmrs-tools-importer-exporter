@@ -86,15 +86,20 @@ export async function importPatient(record) {
   patient.personDateChanged = patient.person?.dateChanged;
   patient.personChangedBy = patient.person?.changedBy;
 
-  // add Health Center person attribute if configured
+  // add Health Center person attribute if configured and not already present
   if (config.OPENMRS_HEALTH_CENTER_ATTRIBUTE_UUID && config.OPENMRS_SOURCE_FACILITY_UUID) {
     if (!patient.person.attributes) {
       patient.person.attributes = [];
     }
-    patient.person.attributes.push({
-      attributeType: { uuid: config.OPENMRS_HEALTH_CENTER_ATTRIBUTE_UUID },
-      value: config.OPENMRS_SOURCE_FACILITY_UUID,
-    });
+    const hasHealthCenterAttribute = patient.person.attributes.some(
+      (attribute) => attribute.attributeType?.uuid === config.OPENMRS_HEALTH_CENTER_ATTRIBUTE_UUID
+    );
+    if (!hasHealthCenterAttribute) {
+      patient.person.attributes.push({
+        attributeType: { uuid: config.OPENMRS_HEALTH_CENTER_ATTRIBUTE_UUID },
+        value: config.OPENMRS_SOURCE_FACILITY_UUID,
+      });
+    }
   }
 
   try {
