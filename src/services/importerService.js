@@ -1,11 +1,12 @@
 import {postDataIfNotExists} from "./openmrsService.js";
-import logger, {duplicateIdentifierLogger} from "../utils/logger.js";
+import logger, {invalidIdentifierLogger} from "../utils/logger.js";
 import CONSTANTS from "../utils/constants.js";
 import {generateStrongPassword} from "../utils/utils.js";
 import config from "../utils/config.js";
 
 const alreadyInUseRegex = /Username \S+ or system id \S+ is already in use/;
 const duplicateIdentifierRegex = /^Identifier (\S+) already in use by another patient$/;
+const invalidIdentifierRegex = /^Identifier "([^"]+)" does not match\s*:\s*"([^"]+)"$/;
 
 // Scans an OpenMRS "identifier already in use" error for the offending identifier value, or returns null
 function extractDuplicateIdentifier(err) {
@@ -22,14 +23,39 @@ function extractDuplicateIdentifier(err) {
   return null;
 }
 
+// Scans an OpenMRS "identifier does not match" error for the offending identifier value, or returns null
+function extractInvalidIdentifier(err) {
+  const globalErrors = err.response?.data?.error?.globalErrors;
+  if (!globalErrors) {
+    return null;
+  }
+  for (const globalError of globalErrors) {
+    const match = invalidIdentifierRegex.exec(globalError.message ?? globalError.code ?? "");
+    if (match) {
+      return match[1];
+    }
+  }
+  return null;
+}
+
 function logDuplicateIdentifier(patient, identifierEntry) {
   const zlEmrIdEntry = patient.identifiers?.find(
-    (i) => i.identifierType?.uuid === CONSTANTS.ZL_EMR_PATIENT_IDENTIFIER_TYPE_UUID
+    (i) => i.identifierType?.uuid === config.EMR_PATIENT_IDENTIFIER_TYPE_UUID
   );
   const zlEmrId = zlEmrIdEntry?.identifier ?? patient.uuid;
   const identifierType = identifierEntry.identifierType?.display ?? identifierEntry.identifierType?.uuid;
   const message = `Patient ${zlEmrId} has duplicate identifier ${identifierEntry.identifier} of type ${identifierType}. Converting to DPL-${identifierEntry.identifier} and importing`;
-  duplicateIdentifierLogger.info(message);
+  invalidIdentifierLogger.info(message);
+  logger.warn(message);
+}
+
+function logInvalidIdentifier(patient, identifierEntry) {
+  const dossierEntry = patient.identifiers?.find(
+    (i) => i.identifierType?.uuid === config.DOSSIER_NUMBER_IDENTIFIER_TYPE_UUID
+  );
+  const dossierNumber = dossierEntry?.identifier ?? patient.uuid;
+  const message = `Invalid ZL EMR ID ${identifierEntry.identifier} for patient with dossier number ${dossierNumber}. Invalid identifier moved to invalid identifier type`;
+  invalidIdentifierLogger.info(message);
   logger.warn(message);
 }
 
@@ -130,6 +156,7 @@ export async function importPatient(record) {
   }
 
   let retriedDuplicateIdentifier = false;
+  let retriedInvalidIdentifier = false;
   while (true) {
     try {
       await postDataIfNotExists(CONSTANTS.TARGET.URLS.PATIENT, patient, patient.uuid);
@@ -137,11 +164,24 @@ export async function importPatient(record) {
     } catch (err) {
       // if this is a "duplicate identifier" error, append the identifier with "DPL-" and try again
       const duplicateIdentifier = !retriedDuplicateIdentifier && extractDuplicateIdentifier(err);
-      const identifierEntry = duplicateIdentifier && patient.identifiers?.find((i) => i.identifier === duplicateIdentifier);
-      if (identifierEntry) {
+      const duplicateIdentifierEntry = duplicateIdentifier && patient.identifiers?.find((i) => i.identifier === duplicateIdentifier);
+      if (duplicateIdentifierEntry) {
         retriedDuplicateIdentifier = true;
-        logDuplicateIdentifier(patient, identifierEntry);
-        identifierEntry.identifier = `DPL-${identifierEntry.identifier}`;
+        logDuplicateIdentifier(patient, duplicateIdentifierEntry);
+        duplicateIdentifierEntry.identifier = `DPL-${duplicateIdentifierEntry.identifier}`;
+        continue;
+      }
+
+      // if this is an "identifier does not match" error, reclassify the ZL EMR ID identifier
+      // as a User Generated Reference Number and try again
+      const invalidIdentifier = !retriedInvalidIdentifier && extractInvalidIdentifier(err);
+      const invalidIdentifierEntry = invalidIdentifier && patient.identifiers?.find(
+        (i) => i.identifier === invalidIdentifier && i.identifierType?.uuid === config.EMR_PATIENT_IDENTIFIER_TYPE_UUID
+      );
+      if (invalidIdentifierEntry) {
+        retriedInvalidIdentifier = true;
+        logInvalidIdentifier(patient, invalidIdentifierEntry);
+        invalidIdentifierEntry.identifierType = { uuid: config.INVALID_IDENTIFIER_TYPE_UUID };
         continue;
       }
 
