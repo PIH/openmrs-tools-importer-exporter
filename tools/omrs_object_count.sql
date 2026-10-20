@@ -76,8 +76,6 @@ SELECT CONCAT(RPAD('PERSONS', 25, ' '), ' = ', @persons) AS pretty_output
 UNION ALL
 SELECT CONCAT(RPAD('PROVIDERS', 25, ' '), ' = ', @providers) AS pretty_output
 UNION ALL
-SELECT CONCAT(RPAD('RADIOLOGY ORDERS', 25, ' '), ' = ', @radiology_orders)
-UNION ALL
 SELECT CONCAT(RPAD('REFERRAL ORDERS', 25, ' '), ' = ', @referral_orders)
 UNION ALL
 SELECT CONCAT(RPAD('RELATIONSHIPS', 25, ' '), ' = ', @relationships)
