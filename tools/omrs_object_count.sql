@@ -25,7 +25,6 @@ select count(*) into @person_attributes from person p, person_attribute pa where
 select count(*) into @person_names from person p, person_name pn where p.person_id = pn.person_id and p.voided = 0 and pn.voided = 0;
 select count(*) into @persons from person where voided = 0;
 select count(*) into @providers from provider pr, person p where pr.person_id = p.person_id and pr.retired = 0 and p.voided = 0;
-select count(*) into @radiology_orders from emr_radiology_order ro, orders o, patient p where ro.order_id = o.order_id and o.patient_id = p.patient_id and o.voided = 0 and p.voided = 0;
 select count(*) into @referral_orders from referral_order ro, orders o, patient p where ro.order_id = o.order_id and o.patient_id = p.patient_id and o.voided = 0 and p.voided = 0;
 select count(*) into @relationships from relationship r, person p1, person p2 where r.person_a = p1.person_id and r.person_b = p2.person_id and p1.voided = 0 and p2.voided = 0 and r.voided = 0;
 select count(*) into @test_orders from test_order t, orders o, patient p where t.order_id = o.order_id and o.patient_id = p.patient_id and o.voided = 0 and p.voided = 0;
