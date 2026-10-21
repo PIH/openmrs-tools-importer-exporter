@@ -1,5 +1,28 @@
 #!/usr/bin/env python3
-"""Zip a directory hierarchy, preserving paths relative to the source directory."""
+"""Zip a directory hierarchy, preserving paths relative to the source directory.
+
+Usage:
+    create_archive.py --source-dir <dir> --output <file.zip>
+
+    --source-dir  Root directory to archive. Its *contents* are archived; the
+                  directory itself is NOT included as a top-level entry.
+    --output      Path of the .zip file to create.
+
+Paths inside the archive are relative to --source-dir. For example, given:
+
+    /opt/openmrs/complex_obs/2024/01/image1.jpg
+    /opt/openmrs/complex_obs/2024/02/image2.jpg
+
+running with "--source-dir /opt/openmrs/complex_obs" produces entries:
+
+    2024/01/image1.jpg
+    2024/02/image2.jpg
+
+(no leading "complex_obs/"). When merging this archive with merge_extract.py,
+pass the *equivalent* directory on the target server as --dest-dir (e.g.
+"--dest-dir /opt/openmrs/complex_obs"), NOT its parent ("/opt/openmrs"),
+otherwise the files will land one level too high.
+"""
 
 import argparse
 import os
@@ -24,8 +47,10 @@ def create_archive(source_dir, output_path):
 
 
 def main():
-    parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--source-dir", required=True, help="Root directory to archive")
+    parser = argparse.ArgumentParser(
+        description=__doc__, formatter_class=argparse.RawDescriptionHelpFormatter
+    )
+    parser.add_argument("--source-dir", required=True, help="Root directory whose contents are archived (the directory itself is not included)")
     parser.add_argument("--output", required=True, help="Path to the .zip file to create")
     args = parser.parse_args()
 
