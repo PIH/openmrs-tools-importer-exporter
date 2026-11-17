@@ -1,4 +1,4 @@
-import fs from 'fs';
+import fs from 'fs/promises';
 import path from 'path';
 import config from './utils/config.js';
 import logger from './utils/logger.js';
@@ -10,6 +10,16 @@ import { increment, writeMetrics } from "./utils/metrics.js";
 
 const UUID_FILE_PATH = path.join(config.EXPORT_PATIENT_LIST_FILE);
 const patientsToExport = loadUuidsFromFile(UUID_FILE_PATH);
+
+// Non-blocking check, so other exports in flight aren't held up
+async function fileExists(filePath) {
+  try {
+    await fs.access(filePath);
+    return true;
+  } catch {
+    return false;
+  }
+}
 
 // Define a batch size
 const BATCH_SIZE = 20;
@@ -41,7 +51,7 @@ async function exportAllPatients() {
           const filename = `${patientUuid}_patient.json`;
           const filePath = path.join(config.TARGET_DIR, filename);
 
-          if (fs.existsSync(filePath)) {
+          if (await fileExists(filePath)) {
             logger.info(`Skipping ${filename}, file already exists`);
             increment('patients skipped');
             return;
@@ -51,7 +61,7 @@ async function exportAllPatients() {
           const jsonData = JSON.stringify(patientRecord, null, 4);
 
           // Save to file
-          fs.writeFileSync(filePath, jsonData);
+          await fs.writeFile(filePath, jsonData);
           logger.info(`Patient data exported to ${filename}`);
           increment('patients exported');
         } catch (error) {
