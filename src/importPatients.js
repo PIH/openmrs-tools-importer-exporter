@@ -31,6 +31,9 @@ const BATCH_SIZE = config.IMPORT_PATIENTS_BATCH_SIZE ? parseInt(config.IMPORT_PA
 const RETRY_MAX = config.IMPORT_PATIENTS_RETRY_MAX ? parseInt(config.IMPORT_PATIENTS_RETRY_MAX, 10) : 3;
 const RETRY_DELAY_MS = config.IMPORT_PATIENTS_RETRY_DELAY_MS ? parseInt(config.IMPORT_PATIENTS_RETRY_DELAY_MS, 10) : 2000;
 
+// Built once: replaceMappings prepares a mappings object the first time it sees it
+const allMappings = Object.assign({}, providerMappings, userMappings, patientIdentifiersMappings, workflowStateMappings, conceptNameMappings);
+
 const PROGRESS_EVERY = 100;
 
 let restoreDrugOrderRequireOutpatientQuantity = false;
@@ -140,7 +143,6 @@ async function processFile(file, retryCount = 0) {
   try {
     const content = await fs.readFile(filePath, 'utf8');
     // replace any mappings
-    const allMappings = Object.assign({}, providerMappings, userMappings, patientIdentifiersMappings, workflowStateMappings, conceptNameMappings);
     const updatedContent = replaceMappings(content, allMappings);
     const patientRecord = decodeHtmlEntitiesInObject(JSON.parse(updatedContent));
 

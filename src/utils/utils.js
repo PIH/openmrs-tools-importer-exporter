@@ -31,10 +31,39 @@ export function generateStrongPassword(length = 16) {
   return passwordArray.sort(() => Math.random() - 0.5).join('');
 }
 
+const UUID_PATTERN = /[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}/g;
+const UUID_KEY = /^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$/;
+const preparedMappings = new WeakMap();
+
+// Splits a mappings object into UUID keys (looked up in one pass) and any other keys (e.g. role names),
+// once per mappings object
+function prepareMappings(mappings) {
+  let prepared = preparedMappings.get(mappings);
+  if (!prepared) {
+    const uuidMap = new Map();
+    const otherEntries = [];
+    for (const [key, value] of Object.entries(mappings ?? {})) {
+      if (UUID_KEY.test(key)) {
+        uuidMap.set(key, value);
+      } else {
+        otherEntries.push([new RegExp(key, "g"), value]);
+      }
+    }
+    prepared = { uuidMap, otherEntries };
+    preparedMappings.set(mappings, prepared);
+  }
+  return prepared;
+}
+
+// Replaces every mapped value in str. UUID keys are replaced in a single pass (find each UUID, look it
+// up), so the cost doesn't grow with the number of mappings; other keys keep the old regex replacement.
 export function replaceMappings(str, mappings) {
-  let updatedStr = str;
-  for (const [targetValue, newValue] of Object.entries(mappings)) {
-    updatedStr = updatedStr.replace(new RegExp(targetValue, "g"), newValue);
+  const { uuidMap, otherEntries } = prepareMappings(mappings);
+  let updatedStr = uuidMap.size > 0
+    ? str.replace(UUID_PATTERN, uuid => uuidMap.get(uuid) ?? uuid)
+    : str;
+  for (const [pattern, newValue] of otherEntries) {
+    updatedStr = updatedStr.replace(pattern, newValue);
   }
   return updatedStr;
 }
