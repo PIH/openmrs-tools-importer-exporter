@@ -21,6 +21,10 @@ async function fileExists(filePath) {
   }
 }
 
+// Compact JSON by default: much smaller files, and the import's cost per file grows with file size.
+// Set EXPORT_JSON_INDENT (e.g. 2) for readable files when debugging.
+const JSON_INDENT = config.EXPORT_JSON_INDENT ? Number(config.EXPORT_JSON_INDENT) : undefined;
+
 // Define a batch size
 const BATCH_SIZE = 20;
 
@@ -58,7 +62,7 @@ async function exportAllPatients() {
           }
 
           const patientRecord = await exportPatient(patientUuid);
-          const jsonData = JSON.stringify(patientRecord, null, 4);
+          const jsonData = JSON.stringify(patientRecord, null, JSON_INDENT);
 
           // Save to file
           await fs.writeFile(filePath, jsonData);
