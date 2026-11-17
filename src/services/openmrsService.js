@@ -4,6 +4,7 @@ import { CookieJar } from 'tough-cookie';
 import logger from '../utils/logger.js';
 import config from '../utils/config.js';
 import CONSTANTS from '../utils/constants.js';
+import { recordRequest } from '../utils/metrics.js';
 
 const sourceClient = wrapper(axios.create({
   jar: new CookieJar(),
@@ -27,8 +28,11 @@ function getClient(server) {
 
 // Helper function to get data from OpenMRS REST WS API with Basic Authentication
 export async function fetchData(url, server = 'SOURCE') {
+  const started = performance.now();
+  let ok = false;
   try {
     const response = await getClient(server).get(url);
+    ok = true;
     if (typeof response.data === 'string' && response.status !== 204) {  // 204 = no content, is what the allergies endpoint returns if no allergies
       throw new Error('Bad Response - Unauthenticated?');
     }
@@ -39,6 +43,8 @@ export async function fetchData(url, server = 'SOURCE') {
       logger.error(error.response.data.error.detail);
     }
     throw error;
+  } finally {
+    recordRequest('GET', url, performance.now() - started, ok);
   }
 }
 

@@ -6,6 +6,7 @@ import { exportPatient } from "./services/exporterService.js";
 import { loadUuidsFromFile } from './services/fileService.js'
 import {getGlobalProperty, setGlobalProperty} from "./services/openmrsService.js";
 import Constants from "./utils/constants.js";
+import { increment, writeMetrics } from "./utils/metrics.js";
 
 const UUID_FILE_PATH = path.join(config.EXPORT_PATIENT_LIST_FILE);
 const patientsToExport = loadUuidsFromFile(UUID_FILE_PATH);
@@ -42,6 +43,7 @@ async function exportAllPatients() {
 
           if (fs.existsSync(filePath)) {
             logger.info(`Skipping ${filename}, file already exists`);
+            increment('patients skipped');
             return;
           }
 
@@ -51,8 +53,10 @@ async function exportAllPatients() {
           // Save to file
           fs.writeFileSync(filePath, jsonData);
           logger.info(`Patient data exported to ${filename}`);
+          increment('patients exported');
         } catch (error) {
           logger.error(`Error exporting patient data for UUID: ${patientUuid}`, error);
+          increment('patients failed');
         }
       });
 
@@ -68,6 +72,10 @@ async function exportAllPatients() {
     }
 
     logger.info('Patient data exported successfully');
+    const { summary, file } = await writeMetrics(config.LOG_HOME, 'export-metrics', { patientsInList: patientsToExport.length });
+    const exported = summary.counters['patients exported'] ?? 0;
+    logger.info(`Export summary: ${JSON.stringify(summary.counters)} in ${summary.wallSeconds} s` +
+      ` (${(exported / summary.wallSeconds).toFixed(1)} exported patients/s); metrics written to ${file}`);
   } catch (error) {
     logger.error('Error exporting patient data', error);
   }
