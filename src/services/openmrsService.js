@@ -15,6 +15,8 @@ function createClient(username, password) {
     httpAgent: new HttpCookieAgent(agentOptions),
     httpsAgent: new HttpsCookieAgent(agentOptions),
     auth: { username, password },
+    // So a hung server fails the request (and the patient can be retried) instead of waiting forever
+    timeout: Number(config.REQUEST_TIMEOUT_MS) || 120000,
   });
 }
 

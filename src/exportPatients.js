@@ -30,6 +30,21 @@ const JSON_INDENT = config.EXPORT_JSON_INDENT ? Number(config.EXPORT_JSON_INDENT
 const CONCURRENCY = Number(config.EXPORT_PATIENTS_CONCURRENCY) || 20;
 const PROGRESS_EVERY = 500;
 
+// Retries for a failed patient, with exponential backoff starting at RETRY_DELAY_MS
+const RETRY_MAX = config.EXPORT_PATIENTS_RETRY_MAX !== undefined ? Number(config.EXPORT_PATIENTS_RETRY_MAX) : 3;
+const RETRY_DELAY_MS = Number(config.EXPORT_PATIENTS_RETRY_DELAY_MS) || 2000;
+const failedUuids = [];
+
+// Worth retrying: no response (connection problem or timeout), server errors, an expired session or
+// throttling. Other errors (e.g. 404, or a bug while parsing) would fail the same way again.
+function isRetryable(error) {
+  const status = error.response?.status;
+  if (status === undefined) {
+    return Boolean(error.isAxiosError || error.code);
+  }
+  return status >= 500 || [401, 408, 429].includes(status);
+}
+
 async function exportAllPatients() {
 
   try {
@@ -52,27 +67,38 @@ async function exportAllPatients() {
   try {
     // Exports one patient (or skips it if its file already exists)
     const exportOne = async (patientUuid) => {
-      try {
-          const filename = `${patientUuid}_patient.json`;
-          const filePath = path.join(config.TARGET_DIR, filename);
+      const filename = `${patientUuid}_patient.json`;
+      const filePath = path.join(config.TARGET_DIR, filename);
+      if (await fileExists(filePath)) {
+        logger.info(`Skipping ${filename}, file already exists`);
+        increment('patients skipped');
+        return;
+      }
 
-          if (await fileExists(filePath)) {
-            logger.info(`Skipping ${filename}, file already exists`);
-            increment('patients skipped');
-            return;
-          }
-
+      for (let attempt = 1; ; attempt++) {
+        try {
           const patientRecord = await exportPatient(patientUuid);
-          const jsonData = JSON.stringify(patientRecord, null, JSON_INDENT);
-
-          // Save to file
-          await fs.writeFile(filePath, jsonData);
+          await fs.writeFile(filePath, JSON.stringify(patientRecord, null, JSON_INDENT));
           logger.info(`Patient data exported to ${filename}`);
           increment('patients exported');
+          if (attempt > 1) {
+            increment('patients exported after a retry');
+          }
+          return;
         } catch (error) {
-          logger.error(`Error exporting patient data for UUID: ${patientUuid}`, error);
+          if (attempt <= RETRY_MAX && isRetryable(error)) {
+            const delay = RETRY_DELAY_MS * 2 ** (attempt - 1);
+            logger.warn(`Error exporting patient ${patientUuid} (attempt ${attempt}), retrying in ${delay} ms: ${error.message}`);
+            increment('retries');
+            await new Promise(resolve => setTimeout(resolve, delay));
+            continue;
+          }
+          logger.error(`Error exporting patient data for UUID: ${patientUuid} (attempt ${attempt}, not retrying)`, error);
           increment('patients failed');
+          failedUuids.push(patientUuid);
+          return;
         }
+      }
     };
 
     // A pool of CONCURRENCY workers, each taking the next patient as soon as it finishes, so a slow
@@ -91,6 +117,12 @@ async function exportAllPatients() {
     await Promise.all(Array.from({ length: Math.min(CONCURRENCY, patientsToExport.length) }, worker));
 
     logger.info('Patient data exported successfully');
+    if (failedUuids.length > 0) {
+      const failedFile = path.join(config.LOG_HOME, 'export-failed-patients.txt');
+      await fs.mkdir(config.LOG_HOME, { recursive: true });
+      await fs.writeFile(failedFile, failedUuids.join('\n') + '\n');
+      logger.warn(`${failedUuids.length} patients failed; their UUIDs are in ${failedFile} (usable as EXPORT_PATIENT_LIST_FILE to retry them)`);
+    }
     const { summary, file } = await writeMetrics(config.LOG_HOME, 'export-metrics', { patientsInList: patientsToExport.length });
     const exported = summary.counters['patients exported'] ?? 0;
     logger.info(`Export summary: ${JSON.stringify(summary.counters)} in ${summary.wallSeconds} s` +
