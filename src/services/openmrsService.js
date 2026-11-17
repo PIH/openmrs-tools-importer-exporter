@@ -1,26 +1,25 @@
 import axios from 'axios';
-import { wrapper } from 'axios-cookiejar-support';
+import { HttpCookieAgent, HttpsCookieAgent } from 'http-cookie-agent/http';
 import { CookieJar } from 'tough-cookie';
 import logger from '../utils/logger.js';
 import config from '../utils/config.js';
 import CONSTANTS from '../utils/constants.js';
 import { recordRequest } from '../utils/metrics.js';
 
-const sourceClient = wrapper(axios.create({
-  jar: new CookieJar(),
-  auth: {
-    username: config.OPENMRS_SOURCE_USERNAME,
-    password: config.OPENMRS_SOURCE_PASSWORD,
-  },
-}));
+// One cookie-aware agent per client, reused for every request, with keep-alive so connections are
+// reused. (axios-cookiejar-support's wrapper created a new agent, and so a new connection, per request.)
+function createClient(username, password) {
+  const jar = new CookieJar();
+  const agentOptions = { cookies: { jar }, keepAlive: true, maxSockets: 256 };
+  return axios.create({
+    httpAgent: new HttpCookieAgent(agentOptions),
+    httpsAgent: new HttpsCookieAgent(agentOptions),
+    auth: { username, password },
+  });
+}
 
-const targetClient = wrapper(axios.create({
-  jar: new CookieJar(),
-  auth: {
-    username: config.OPENMRS_TARGET_USERNAME,
-    password: config.OPENMRS_TARGET_PASSWORD,
-  },
-}));
+const sourceClient = createClient(config.OPENMRS_SOURCE_USERNAME, config.OPENMRS_SOURCE_PASSWORD);
+const targetClient = createClient(config.OPENMRS_TARGET_USERNAME, config.OPENMRS_TARGET_PASSWORD);
 
 function getClient(server) {
   return server === 'TARGET' ? targetClient : sourceClient;
