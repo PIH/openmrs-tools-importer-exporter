@@ -27,6 +27,23 @@ function getClient(server) {
   return server === 'TARGET' ? targetClient : sourceClient;
 }
 
+// Runs a request, recording its duration by resource type; a 404 counts as a normal outcome (it's how
+// postDataIfNotExists finds out a resource doesn't exist yet)
+async function timed(method, url, request) {
+  const started = performance.now();
+  let ok = false;
+  try {
+    const response = await request();
+    ok = true;
+    return response;
+  } catch (err) {
+    ok = err.response?.status === 404;
+    throw err;
+  } finally {
+    recordRequest(method, url, performance.now() - started, ok);
+  }
+}
+
 // Helper function to get data from OpenMRS REST WS API with Basic Authentication
 export async function fetchData(url, server = 'SOURCE') {
   const started = performance.now();
@@ -54,7 +71,7 @@ export async function fetchData(url, server = 'SOURCE') {
 export async function postDataIfNotExists(resourceUrl, data, uuid) {
   try {
     const getUrl = `${resourceUrl}/${uuid}`;
-    const response = await targetClient.get(getUrl);
+    const response = await timed('GET', getUrl, () => targetClient.get(getUrl));
     if (response.data?.uuid === uuid) {
       // our script, has currently written, does not overwrite objects that already exist (equality based on uuid)
       logger.info(`Resource already exists: ${getUrl}`);
@@ -64,7 +81,7 @@ export async function postDataIfNotExists(resourceUrl, data, uuid) {
     }
   } catch (err) {
     if (err.response && err.response.status === 404) {
-      const response = await targetClient.post(resourceUrl, data);
+      const response = await timed('POST', resourceUrl, () => targetClient.post(resourceUrl, data));
       if (response.status !== 201) {
         throw new Error(`Failed to create resource at ${resourceUrl}, status code: ${response.status}`);
       }

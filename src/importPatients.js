@@ -7,6 +7,7 @@ import {loadMappingFile, moveFile} from './services/fileService.js';
 import { getGlobalProperty, setGlobalProperty } from "./services/openmrsService.js";
 import Constants from "./utils/constants.js";
 import {replaceMappings, decodeHtmlEntitiesInObject} from "./utils/utils.js";
+import { increment, writeMetrics } from "./utils/metrics.js";
 
 const TARGET_DIR = config.TARGET_DIR;
 const SUCCESS_DIR = path.join(TARGET_DIR, 'successful');
@@ -95,6 +96,8 @@ async function importAllPatients() {
     const totalElapsed = ((Date.now() - overallStart) / 1000).toFixed(2);
     const overallThroughput = (totalFiles / (totalElapsed || 1)).toFixed(2);
     logger.info(`All ${totalFiles} files processed in ${totalElapsed}s (${overallThroughput} patients/s avg) with batch size ${BATCH_SIZE}.`);
+    const { summary, file } = await writeMetrics(config.LOG_HOME, 'import-metrics', { files: totalFiles, batchSize: BATCH_SIZE });
+    logger.info(`Import summary: ${JSON.stringify(summary.counters)} in ${summary.wallSeconds} s; metrics written to ${file}`);
   } catch (err) {
     logger.error(`Error during processing: ${err.message}`);
   }
@@ -147,16 +150,32 @@ async function processFile(file, retryCount = 0) {
     // Move the file to the "successful" directory
     await moveFile(filePath, SUCCESS_DIR);
     logger.info(`File ${file} successfully moved to ${SUCCESS_DIR}`);
+    increment('patients imported');
+    if (retryCount > 0) {
+      increment('patients imported after a retry');
+    }
   } catch (err) {
     if (isTransientError(err) && retryCount < RETRY_MAX) {
       logger.warn(`TransientPropertyValueException for ${file}, retrying in ${RETRY_DELAY_MS}ms (attempt ${retryCount + 1}/${RETRY_MAX})...`);
+      increment(`retries: ${errorClass(err)}`);
       await delay(RETRY_DELAY_MS);
       return processFile(file, retryCount + 1);
     }
     logger.error(`Error processing file ${file}: ${err.message}`);
+    increment('patients failed');
+    increment(`failures: ${errorClass(err)}`);
     await moveFile(filePath, FAILED_DIR);
     logger.info(`File ${file} moved to ${FAILED_DIR} due to errors.`);
   }
+}
+
+// A label for an error with no identifiers in it: the Java exception class(es) in the OpenMRS error, or
+// the HTTP status, for counting failures by type
+function errorClass(err) {
+  const text = `${err.response?.data?.error?.detail ?? ''} ${err.response?.data?.error?.message ?? ''} ${err.message ?? ''}`;
+  const classes = [...new Set(text.match(/\b[A-Z][A-Za-z]*(Exception|Error)\b/g) ?? [])];
+  const status = err.response?.status ? `HTTP ${err.response.status}` : 'no HTTP response';
+  return classes.length > 0 ? `${status} ${classes.join(', ')}` : status;
 }
 
 function isTransientError(err) {
