@@ -25,8 +25,10 @@ async function fileExists(filePath) {
 // Set EXPORT_JSON_INDENT (e.g. 2) for readable files when debugging.
 const JSON_INDENT = config.EXPORT_JSON_INDENT ? Number(config.EXPORT_JSON_INDENT) : undefined;
 
-// Define a batch size
-const BATCH_SIZE = 20;
+// How many patients to export at a time. Each patient sends 9 requests in parallel, so 20 means about
+// 180 requests in flight against the source server: mind its load if it's a production system.
+const CONCURRENCY = Number(config.EXPORT_PATIENTS_CONCURRENCY) || 20;
+const PROGRESS_EVERY = 500;
 
 async function exportAllPatients() {
 
@@ -48,10 +50,9 @@ async function exportAllPatients() {
   }
 
   try {
-    // Function to process a single batch of patient UUIDs
-    const processBatch = async (batch) => {
-      const exportPromises = batch.map(async (patientUuid) => {
-        try {
+    // Exports one patient (or skips it if its file already exists)
+    const exportOne = async (patientUuid) => {
+      try {
           const filename = `${patientUuid}_patient.json`;
           const filePath = path.join(config.TARGET_DIR, filename);
 
@@ -72,18 +73,22 @@ async function exportAllPatients() {
           logger.error(`Error exporting patient data for UUID: ${patientUuid}`, error);
           increment('patients failed');
         }
-      });
-
-      // Wait until all promises in the batch are complete
-      await Promise.all(exportPromises);
     };
 
-    // Split patients into batches and process each batch
-    for (let i = 0; i < patientsToExport.length; i += BATCH_SIZE) {
-      const batch = patientsToExport.slice(i, i + BATCH_SIZE);
-      logger.info(`Processing batch: ${i / BATCH_SIZE + 1}`);
-      await processBatch(batch); // Wait for the current batch to complete
-    }
+    // A pool of CONCURRENCY workers, each taking the next patient as soon as it finishes, so a slow
+    // patient doesn't hold up a whole batch
+    let next = 0;
+    let done = 0;
+    const worker = async () => {
+      while (next < patientsToExport.length) {
+        await exportOne(patientsToExport[next++]);
+        if (++done % PROGRESS_EVERY === 0) {
+          logger.info(`Progress: ${done} of ${patientsToExport.length} patients`);
+        }
+      }
+    };
+    logger.info(`Exporting ${patientsToExport.length} patients with ${CONCURRENCY} at a time`);
+    await Promise.all(Array.from({ length: Math.min(CONCURRENCY, patientsToExport.length) }, worker));
 
     logger.info('Patient data exported successfully');
     const { summary, file } = await writeMetrics(config.LOG_HOME, 'export-metrics', { patientsInList: patientsToExport.length });
