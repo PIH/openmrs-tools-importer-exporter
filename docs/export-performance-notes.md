@@ -1,7 +1,7 @@
 # Patient export performance notes
 
 Analysis done 2026-10-28, based on the code as of commit `a2e18aa` and de-identified aggregates from
-`src/logs/app.log`. Nothing here has been implemented yet. The export is already much faster than the import (see
+`src/logs/app.log`. **All suggestions were implemented on 2026-11-17; see [Results](#results-2026-11-17) at the end.** The export is already much faster than the import (see
 [import-performance-notes.md](import-performance-notes.md)), so the main value of these changes is making the
 import faster and more robust, not the export itself.
 
@@ -79,3 +79,39 @@ pass.
 
 Log aggregation must stay de-identified: counts only, with UUIDs stripped. The logs contain patient identifiers, and
 company policy forbids processing patient data in cloud-based AI.
+
+## Results (2026-11-17)
+
+All six suggestions were implemented, one commit each, and measured against the SSPE data on a local copy
+of the SSPE production database (source server on the same machine). Each step was checked with
+`tools/compare-exports.js`, which compares parsed JSON by hash and reports only counts and key paths.
+
+Sample of 3,000 patients (fixed random sample), `tools/export-bench.sh`:
+
+| Step | Patients/s | Output vs baseline |
+|---|---|---|
+| Baseline | 50.2 | 1 patient failed (drug order recursion) |
+| Keep-alive (#4): one cookie agent per client; `axios-cookiejar-support` made a new connection per request | 53.1 | identical |
+| `fs.promises` (#6) | 53.2 | identical |
+| Compact JSON (#2), `EXPORT_JSON_INDENT` to indent | 58.9 | identical, files 48% of the size |
+| Fetch obs once (#1) | 66.2 | identical |
+| Worker pool, `EXPORT_PATIENTS_CONCURRENCY` (#3) | 69.9 | identical |
+| Retries, failed list, request timeout (#5) | ~70–75 | identical |
+| Drug order fix (#6): previousOrder not in the export is removed with a warning | 70.6 | all 3,000 export |
+| Warn when a search hits max results (#6) | 75.0 | identical |
+
+Concurrency 10, 20, 40 and 80 all ran at ~70 patients/s: the source server is now the bottleneck.
+
+Full SSPE export (54,268 patients):
+
+| | Before | After |
+|---|---|---|
+| Time | 18 min 2 s (50.2 patients/s) | 12 min 11 s (74.2 patients/s) |
+| Patients exported | 54,266 (2 failed: drug order recursion) | 54,268 |
+| Size | 8.4 GB | 4.1 GB |
+
+All 54,266 patients exported by both runs were identical after parsing.
+
+Retry tests: pausing the source server for 25 s mid-run (10 s request timeout) led to 20 patients each
+retrying twice and succeeding, with identical output; nonexistent patients fail on a 404 without retries
+and are listed in `LOG_HOME/export-failed-patients.txt`; existing files are skipped.
