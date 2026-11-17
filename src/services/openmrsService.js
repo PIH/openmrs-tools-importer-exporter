@@ -81,7 +81,7 @@ export async function postDataIfNotExists(resourceUrl, data, uuid, { skipExisten
       }
       // our script, has currently written, does not overwrite objects that already exist (equality based on uuid)
       if (response.data?.uuid === uuid) {
-        logger.info(`Resource already exists: ${getUrl}`);
+        logger.debug(`Resource already exists: ${getUrl}`);
       }
       return 'existed';
     } catch (err) {
@@ -94,7 +94,7 @@ export async function postDataIfNotExists(resourceUrl, data, uuid, { skipExisten
   if (response.status !== 201) {
     throw new Error(`Failed to create resource at ${resourceUrl}, status code: ${response.status}`);
   }
-  logger.info(`Created new resource at ${resourceUrl}`);
+  logger.debug(`Created new resource at ${resourceUrl}`);
   return 'created';
 }
 

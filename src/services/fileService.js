@@ -80,13 +80,18 @@ export function loadRelationshipUuidsFromDir(directory) {
   return uuids;
 }
 
+const createdDirs = new Set();
+
 export async function moveFile(filePath, destinationDir) {
   try {
     const fileName = path.basename(filePath);
     const destinationPath = path.join(destinationDir, fileName);
 
-    // Ensure the destination directory exists
-    await fsPromises.mkdir(destinationDir, { recursive: true });
+    // Ensure the destination directory exists (once per directory)
+    if (!createdDirs.has(destinationDir)) {
+      await fsPromises.mkdir(destinationDir, { recursive: true });
+      createdDirs.add(destinationDir);
+    }
 
     await fsPromises.rename(filePath, destinationPath);
   } catch (err) {

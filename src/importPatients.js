@@ -151,7 +151,7 @@ async function processFile(file, retryCount = 0) {
     logger.info(`Successfully processed patient from file ${file}`);
     // Move the file to the "successful" directory
     await moveFile(filePath, SUCCESS_DIR);
-    logger.info(`File ${file} successfully moved to ${SUCCESS_DIR}`);
+    logger.debug(`File ${file} successfully moved to ${SUCCESS_DIR}`);
     increment('patients imported');
     if (retryCount > 0) {
       increment('patients imported after a retry');

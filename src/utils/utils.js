@@ -85,6 +85,9 @@ export function decodeHtmlEntitiesInObject(obj) {
       Object.entries(obj).map(([key, value]) => [key, decodeHtmlEntitiesInObject(value)])
     );
   } else if (typeof obj === "string") {
+    if (!obj.includes("&")) {
+      return obj;  // nothing to decode (most strings)
+    }
     return obj
       .replace(/&amp;/g, "&")
       .replace(/&lt;/g, "<")
