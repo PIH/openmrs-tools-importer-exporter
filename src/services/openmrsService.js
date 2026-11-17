@@ -68,30 +68,34 @@ export async function fetchData(url, server = 'SOURCE') {
 
 // Try to GET a resource by UUID; if 404, POST it instead
 // ie, if a resource already exists, we simply skip and move
-export async function postDataIfNotExists(resourceUrl, data, uuid) {
-  try {
-    const getUrl = `${resourceUrl}/${uuid}`;
-    const response = await timed('GET', getUrl, () => targetClient.get(getUrl));
-    if (response.data?.uuid === uuid) {
+// Returns 'created' or 'existed'. With skipExistenceCheck, POSTs directly: for children of a patient that
+// was just created, which can't exist yet.
+export async function postDataIfNotExists(resourceUrl, data, uuid, { skipExistenceCheck = false } = {}) {
+  if (!skipExistenceCheck) {
+    try {
+      // Only the uuid: the default representation (e.g. an encounter's obs and orders) isn't needed
+      const getUrl = `${resourceUrl}/${uuid}`;
+      const response = await timed('GET', getUrl, () => targetClient.get(`${getUrl}?v=custom:(uuid)`));
+      if (typeof response?.data === 'string') {
+        throw new Error('Bad Response - Unauthenticated?');
+      }
       // our script, has currently written, does not overwrite objects that already exist (equality based on uuid)
-      logger.info(`Resource already exists: ${getUrl}`);
-    }
-    if (typeof response?.data === 'string') {
-      throw new Error('Bad Response - Unauthenticated?');
-    }
-  } catch (err) {
-    if (err.response && err.response.status === 404) {
-      const response = await timed('POST', resourceUrl, () => targetClient.post(resourceUrl, data));
-      if (response.status !== 201) {
-        throw new Error(`Failed to create resource at ${resourceUrl}, status code: ${response.status}`);
+      if (response.data?.uuid === uuid) {
+        logger.info(`Resource already exists: ${getUrl}`);
       }
-      else {
-        logger.info(`Created new resource at ${resourceUrl}`);
+      return 'existed';
+    } catch (err) {
+      if (!(err.response && err.response.status === 404)) {
+        throw err;
       }
-    } else {
-      throw err;
     }
   }
+  const response = await timed('POST', resourceUrl, () => targetClient.post(resourceUrl, data));
+  if (response.status !== 201) {
+    throw new Error(`Failed to create resource at ${resourceUrl}, status code: ${response.status}`);
+  }
+  logger.info(`Created new resource at ${resourceUrl}`);
+  return 'created';
 }
 
 
