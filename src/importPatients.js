@@ -158,9 +158,12 @@ async function processFile(file, retryCount = 0) {
     }
   } catch (err) {
     if (isTransientError(err) && retryCount < RETRY_MAX) {
-      logger.warn(`TransientPropertyValueException for ${file}, retrying in ${RETRY_DELAY_MS}ms (attempt ${retryCount + 1}/${RETRY_MAX})...`);
+      const retryDelay = RETRY_DELAY_MS * 2 ** retryCount;
+      logger.warn(`TransientPropertyValueException for ${file}, retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${RETRY_MAX})...`);
       increment(`retries: ${errorClass(err)}`);
-      await delay(RETRY_DELAY_MS);
+      // On a retry the patient already exists, so only its missing children are posted (each existing one
+      // costs one small GET)
+      await delay(retryDelay);
       return processFile(file, retryCount + 1);
     }
     logger.error(`Error processing file ${file}: ${err.message}`);
@@ -180,13 +183,12 @@ function errorClass(err) {
   return classes.length > 0 ? `${status} ${classes.join(', ')}` : status;
 }
 
+// Only the "newly created patient not found yet" failure is worth retrying. ConstraintViolationException
+// isn't: on the SSPE data every one was a missing creator (a mapping problem) and failed again each time.
 function isTransientError(err) {
   const detail = err.response?.data?.error?.detail ?? '';
   const message = err.message ?? '';
-  return (
-    detail.includes('TransientPropertyValueException') || message.includes('TransientPropertyValueException') ||
-    detail.includes('ConstraintViolationException') || message.includes('ConstraintViolationException')
-  );
+  return detail.includes('TransientPropertyValueException') || message.includes('TransientPropertyValueException');
 }
 
 function delay(ms) {
