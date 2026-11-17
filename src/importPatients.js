@@ -31,6 +31,8 @@ const BATCH_SIZE = config.IMPORT_PATIENTS_BATCH_SIZE ? parseInt(config.IMPORT_PA
 const RETRY_MAX = config.IMPORT_PATIENTS_RETRY_MAX ? parseInt(config.IMPORT_PATIENTS_RETRY_MAX, 10) : 3;
 const RETRY_DELAY_MS = config.IMPORT_PATIENTS_RETRY_DELAY_MS ? parseInt(config.IMPORT_PATIENTS_RETRY_DELAY_MS, 10) : 2000;
 
+const PROGRESS_EVERY = 100;
+
 let restoreDrugOrderRequireOutpatientQuantity = false;
 
 async function importAllPatients() {
@@ -76,22 +78,20 @@ async function importAllPatients() {
 
     logger.info(`Starting import of ${totalFiles} patient files with batch size ${BATCH_SIZE}.`);
 
-    // Divide files into chunks/batches
-    const fileBatches = chunkArray(files, BATCH_SIZE);
-
+    // A pool of BATCH_SIZE workers, each taking the next file as soon as it finishes, so a slow (or
+    // retrying) patient doesn't hold up a whole batch
+    let next = 0;
     let processedCount = 0;
-
-    // Process each batch sequentially
-    for (let i = 0; i < fileBatches.length; i++) {
-      const batch = fileBatches[i];
-      const batchStart = Date.now();
-      logger.info(`Processing batch ${i + 1}/${fileBatches.length} (${batch.length} files).`);
-      await Promise.all(batch.map(file => processFile(file)));
-      const batchElapsed = ((Date.now() - batchStart) / 1000).toFixed(2);
-      processedCount += batch.length;
-      const throughput = (batch.length / (batchElapsed || 1)).toFixed(2);
-      logger.info(`Batch ${i + 1} complete: ${batch.length} patients in ${batchElapsed}s (${throughput} patients/s). Total processed: ${processedCount}/${totalFiles}.`);
-    }
+    const worker = async () => {
+      while (next < files.length) {
+        await processFile(files[next++]);
+        if (++processedCount % PROGRESS_EVERY === 0) {
+          const elapsed = (Date.now() - overallStart) / 1000;
+          logger.info(`Progress: ${processedCount}/${totalFiles} patients in ${elapsed.toFixed(0)}s (${(processedCount / elapsed).toFixed(2)} patients/s).`);
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(BATCH_SIZE, files.length) }, worker));
 
     const totalElapsed = ((Date.now() - overallStart) / 1000).toFixed(2);
     const overallThroughput = (totalFiles / (totalElapsed || 1)).toFixed(2);
@@ -189,15 +189,6 @@ function isTransientError(err) {
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// Helper function to chunk an array into smaller batches
-function chunkArray(array, size) {
-  const chunks = [];
-  for (let i = 0; i < array.length; i += size) {
-    chunks.push(array.slice(i, i + size));
-  }
-  return chunks;
 }
 
 importAllPatients().catch(err => logger.error(`Fatal error: ${err.message}`));
