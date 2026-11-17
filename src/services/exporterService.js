@@ -3,6 +3,9 @@ import config from "../utils/config.js";
 import {fetchData} from "./openmrsService.js";
 import {sortByUuid, stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight} from "../utils/utils.js";
 
+// Must match the max-results value exportPatients.js and verifyPatients.js set on the server
+const MAX_RESULTS = 99999;
+
 export async function exportUser(userUuid, server = 'SOURCE') {
   const userUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.USER : CONSTANTS.SOURCE.URLS.USER}/${userUuid}?${CONSTANTS.USER_CUSTOM_REP}`;
   const userData = await fetchData(userUrl, server);
@@ -49,6 +52,18 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
     fetchData(patientProgramsUrl, server),
     fetchData(allergiesUrl, server)
   ]);
+
+  // The export raises the REST max-results setting to 99999 instead of paging, so a search that returns
+  // that many results may have been cut off
+  const searches = { visits: visitsData, encounters: encountersData, obs: obsData, testOrders: testOrderData,
+    drugOrders: drugOrderData, medicationDispenses: medicationDispenseData, programEnrollments: patientProgramsData,
+    allergies: allergiesData };
+  for (const [name, data] of Object.entries(searches)) {
+    if ((data?.results?.length ?? 0) >= MAX_RESULTS) {
+      logger.warn(`Patient ${patientUuid}: the ${name} search returned ${data.results.length} results, the maximum; it may be incomplete`);
+      increment('searches that hit the max results (may be incomplete)');
+    }
+  }
 
   // Fetch the full representation only for the encounterless obs
   const encounterlessObsUuids = (obsData ? obsData.results : []).filter(obs => obs.encounter == null).map(obs => obs.uuid);
