@@ -1,6 +1,7 @@
 import CONSTANTS from "../utils/constants.js";
 import config from "../utils/config.js";
 import {fetchData} from "./openmrsService.js";
+import logger from "../utils/logger.js";
 import {sortByUuid, stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight} from "../utils/utils.js";
 
 export async function exportUser(userUuid, server = 'SOURCE') {
@@ -125,28 +126,49 @@ function parseAllergies(results) {
   return stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results));
 }
 
-function parseDrugOrderList(results, server, processedUuids = []) {
-  let drugOrderList = [];
-  let unprocessedDrugOrderList = [];
-  stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results))
-    .forEach(drugOrder => {
-      // if we haven't processsed the previous order, we don't want to add this one to the order list yet
-      if (drugOrder.previousOrder?.uuid && !processedUuids.includes(drugOrder.previousOrder.uuid)) {
-        unprocessedDrugOrderList.push(drugOrder);
-      }
-      // otherwise, process as normal
-      else {
-        processedUuids.push(drugOrder.uuid);
-        drugOrderList.push(parseDrugOrder(drugOrder,server));
-      }
+function parseDrugOrderList(results, server) {
+  return sequenceOrders(results, 'drug').map(order => parseDrugOrder(order, server));
+}
 
-    })
-  // recursively process any unprocessed orders and add to the list
-  // TODO: will run infinitely if there are voided previous orders (which would not be included in the export), can this happen IRL?
-  if (unprocessedDrugOrderList.length > 0) {
-    drugOrderList.push(...parseDrugOrderList(unprocessedDrugOrderList, server, processedUuids));
+// Sorts orders (drug or test orders) so each comes after its previous order, which must be imported first.
+// An order's previousOrder must be in this export too. If it isn't (e.g. the previous order is voided, so the
+// order search leaves it out), the reference is dropped rather than refer to an order that won't exist on
+// the target. (Before, the recursion here never ended in that case and the patient wasn't exported.)
+function sequenceOrders(results, kind) {
+  const orders = stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results));
+
+  const exportedUuids = new Set(orders.map(order => order.uuid));
+  orders.forEach(order => {
+    if (order.previousOrder?.uuid && !exportedUuids.has(order.previousOrder.uuid)) {
+      logger.warn(`${kind} order ${order.uuid} refers to previous order ${order.previousOrder.uuid}, which isn't in the export; removing the reference`);
+      delete order.previousOrder;
+    }
+  });
+
+  // Each pass goes through the remaining orders in uuid order, placing an order once its previous order (if
+  // any) has been placed, and defers the rest to the next pass
+  const sequenced = [];
+  const processedUuids = new Set();
+  let remaining = orders;
+  while (remaining.length > 0) {
+    const deferred = [];
+    remaining.forEach(order => {
+      if (order.previousOrder?.uuid && !processedUuids.has(order.previousOrder.uuid)) {
+        deferred.push(order);
+      } else {
+        processedUuids.add(order.uuid);
+        sequenced.push(order);
+      }
+    });
+    if (deferred.length === remaining.length) {
+      // Only possible with a cycle of previous orders; add the rest as they are rather than loop forever
+      logger.warn(`${deferred.length} ${kind} orders form a cycle of previous orders; adding them unordered`);
+      sequenced.push(...deferred);
+      break;
+    }
+    remaining = deferred;
   }
-  return drugOrderList;
+  return sequenced;
 }
 
 function parseDrugOrder(inputDrugOrder, server) {
@@ -157,14 +179,8 @@ function parseDrugOrder(inputDrugOrder, server) {
   };
 }
 
-// TODO do we need the recursive previous order here as well (we aren't currently including the previous order in the test export)
 function parseTestOrderList(results, server) {
-  let testOrderList = [];
-  stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight(sortByUuid(results))
-    .forEach(testOrder => {
-    testOrderList.push(parseTestOrder(testOrder, server));
-  })
-  return testOrderList;
+  return sequenceOrders(results, 'test').map(order => parseTestOrder(order, server));
 }
 
 function parseTestOrder(inputTestOrder, server) {
