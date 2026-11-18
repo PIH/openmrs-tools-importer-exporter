@@ -97,7 +97,7 @@ Sample of 3,000 patients (fixed random sample), `tools/export-bench.sh`:
 | Fetch obs once (#1) | 66.2 | identical |
 | Worker pool, `EXPORT_PATIENTS_CONCURRENCY` (#3) | 69.9 | identical |
 | Retries, failed list, request timeout (#5) | ~70–75 | identical |
-| Drug order fix (#6): previousOrder not in the export is removed with a warning | 70.6 | all 3,000 export |
+| Drug order fix (#6): previousOrder not in the export is removed with a warning (now a separate PR, see below) | 70.6 | all 3,000 export |
 | Warn when a search hits max results (#6) | 75.0 | identical |
 
 Concurrency 10, 20, 40 and 80 all ran at ~70 patients/s: the source server is now the bottleneck.
@@ -111,6 +111,10 @@ Full SSPE export (54,268 patients):
 | Size | 8.4 GB | 4.1 GB |
 
 All 54,266 patients exported by both runs were identical after parsing.
+
+The drug order recursion fix, which let the last 2 patients export, was measured as part of this work but is in a
+separate PR with the other order fixes (HAI-1284), so the performance changes stay separate from data fixes.
+Without it, those 2 patients still fail, now after retries, and are listed in `export-failed-patients.txt`.
 
 Retry tests: pausing the source server for 25 s mid-run (10 s request timeout) led to 20 patients each
 retrying twice and succeeding, with identical output; nonexistent patients fail on a 404 without retries

@@ -183,3 +183,7 @@ values): `testOrders[].accessionNumber` missing on the target (2,678 patients), 
 the target but not in the file (141) or different (9), and about 10 others (`patient.dateCreated`, address
 `preferred`, an obs location, one encounter's visit). So test orders lose their accession number on import,
 and the target stops some test orders itself.
+
+The causes of these failures and verification differences, and the fixes for them, are tracked on HAI-1284 and
+in separate PRs: the accession number differences are empty strings in the source, and the stopped test orders
+come from test orders being exported without their `previousOrder`.
