@@ -14,7 +14,7 @@ BENCH_DIR=$1; NAME=$2; SAMPLE=$3; shift 3
 OUT="$BENCH_DIR/$NAME"; LOGS="$BENCH_DIR/$NAME-logs"
 [ -e "$OUT" ] && { echo "$OUT already exists" >&2; exit 2; }
 mkdir -p "$OUT" "$LOGS"
-cp -l "$SAMPLE"/*_patient.json "$OUT"/
+find "$SAMPLE" -maxdepth 1 -name '*_patient.json' -exec cp -l -t "$OUT" {} +
 cd "$(dirname "$0")/../src" || exit 2
 start=$(date +%s.%N)
 env TARGET_DIR="$OUT" LOG_HOME="$LOGS" "$@" node importPatients.js > "$LOGS/console.log" 2>&1
