@@ -180,7 +180,15 @@ function errorClass(err) {
   const text = `${err.response?.data?.error?.detail ?? ''} ${err.response?.data?.error?.message ?? ''} ${err.message ?? ''}`;
   const classes = [...new Set(text.match(/\b[A-Z][A-Za-z]*(Exception|Error)\b/g) ?? [])];
   const status = err.response?.status ? `HTTP ${err.response.status}` : 'no HTTP response';
-  return classes.length > 0 ? `${status} ${classes.join(', ')}` : status;
+  // Validation errors (HTTP 400) have no exception class; their error codes (message keys such as
+  // Order.error.xyz, with field names for field errors) say what was wrong without any data
+  const error = err.response?.data?.error;
+  const codes = [...new Set([
+    ...(error?.globalErrors ?? []).map(e => e.code),
+    ...Object.entries(error?.fieldErrors ?? {}).flatMap(([field, errors]) => errors.map(e => `${field}: ${e.code}`)),
+  ].filter(Boolean))];
+  const labels = [...classes, ...codes];
+  return labels.length > 0 ? `${status} ${labels.join(', ')}` : status;
 }
 
 // Only the "newly created patient not found yet" failure is worth retrying. ConstraintViolationException
