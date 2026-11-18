@@ -102,7 +102,8 @@ program states. Visits, encounters, encounterless obs, test orders, dispenses an
 parallel within their step, but this risks lock contention on the same patient.
 
 ### 9. Target server/DB tuning for the duration of the import
-- `hibernate.search.indexing_strategy=manual` during the import, then rebuild the search index afterwards (test first).
+- Turn off search indexing during the import, then rebuild the search index afterwards. Tested; see "Server settings
+  for the migration window" below for the property that works on this OpenMRS version.
 - Disable modules that react to every save (event/ActiveMQ, atomfeed, dbevent/Debezium, name phonetics, sync/HL7).
 - MySQL: `innodb_flush_log_at_trx_commit=2`, `sync_binlog=0` (or turn off the binlog), a large
   `innodb_buffer_pool_size`. Put these back afterwards.
@@ -187,3 +188,49 @@ and the target stops some test orders itself.
 The causes of these failures and verification differences, and the fixes for them, are tracked on HAI-1284 and
 in separate PRs: the accession number differences are empty strings in the source, and the stopped test orders
 come from test orders being exported without their `previousOrder`.
+
+## Server settings for the migration window (manual runbook)
+
+The server-side results above came from three changes on the target server. They are made by hand, not by the
+importer. Here is what applies to the production Haiti servers and how to do each one. Puppet: the Haiti EMR
+servers run Tomcat and MySQL in Docker under `openmrs::pihemr_docker`.
+
+**1. OpenMRS connects to MySQL directly, not through a published Docker port: not needed on production.** The
+production containers use `network_mode: host`, so OpenMRS already reaches MySQL on `localhost:3306` with no Docker
+proxy in between. This gain (72 → 56 s on the sample) only applied to the local test setup. It does mean the local
+timings are closer to what production can do than the "default settings" estimate.
+
+**2. `innodb_flush_log_at_trx_commit=2` (about 13% faster on the sample).**
+- Before the import, as MySQL root in the MySQL container: `SET GLOBAL innodb_flush_log_at_trx_commit = 2;`. Check
+  it with `SELECT @@innodb_flush_log_at_trx_commit;`. It takes effect at once, with no restart.
+- After the import: `SET GLOBAL innodb_flush_log_at_trx_commit = 1;`. A MySQL restart also puts back the configured
+  value, because `SET GLOBAL` isn't saved.
+- Risk: a crash of the OS or the machine (not just MySQL) can lose about the last second of commits. Take a backup
+  right before the import, and don't leave this setting on for normal operation.
+
+**3. Search indexing off during the import, then a full rebuild (about 10% faster on the sample).**
+- Before the import: add `hibernate.search.indexing.listeners.enabled=false` to
+  `~tomcat/.OpenMRS/openmrs-runtime.properties` and restart OpenMRS. (`hibernate.search.indexing_strategy=manual`
+  is the older Hibernate Search property and doesn't apply to this version.)
+- **Puppet manages `openmrs-runtime.properties`**
+  (`mirebalais-modules/openmrs/templates/openmrs-runtime.properties.erb`), so a puppet run during the window puts
+  the file back. Don't run puppet until the import is done.
+- While indexing is off, nothing saved is added to the search index. That includes anything users enter during the
+  window. For example, a patient registered then won't be found by name search until the rebuild. The imported data
+  isn't searchable until the rebuild either.
+- After the import: remove the line, restart OpenMRS, then rebuild the whole index. Either:
+  - `POST /openmrs/ws/rest/v1/searchindexupdate` as an admin, with body `{"async": true}` to run it in the
+    background; or
+  - delete the `search.indexVersion` global property and restart. Core rebuilds the index at startup when that
+    property doesn't match its version. This is the method used when restoring production databases locally.
+- How long the rebuild takes on ZL Central hasn't been measured yet. Measure it on a copy before the real
+  migration.
+
+**Also:**
+- Run the importer on the same host or local network as the target server. Each patient takes hundreds of requests,
+  and every request makes many database round trips, so latency adds up fast. In the tests, the importer ran on
+  the same machine as the server.
+- The tests used 30 workers (`IMPORT_PATIENTS_BATCH_SIZE=30`). 10, 30 and 60 all took the same time. Production's
+  C3P0 pool (`hibernate.c3p0.max_size=50`) is big enough for that.
+- Put everything back afterwards: `innodb_flush_log_at_trx_commit=1`, the indexing property removed, the index
+  rebuilt, and puppet runs resumed.
