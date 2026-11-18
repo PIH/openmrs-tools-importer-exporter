@@ -223,8 +223,9 @@ timings are closer to what production can do than the "default settings" estimat
     background; or
   - delete the `search.indexVersion` global property and restart. Core rebuilds the index at startup when that
     property doesn't match its version. This is the method used when restoring production databases locally.
-- How long the rebuild takes on ZL Central hasn't been measured yet. Measure it on a copy before the real
-  migration.
+- Rebuild time: **about 12 minutes** (727 s for the synchronous REST call) on the local copy of ZL Central after
+  the full SSPE test import: 654,974 patients and a 592 MB index. Measured on a developer machine, so production
+  may differ. Patient search is incomplete until the rebuild finishes.
 
 **Also:**
 - Run the importer on the same host or local network as the target server. Each patient takes hundreds of requests,
