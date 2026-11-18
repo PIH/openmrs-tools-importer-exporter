@@ -163,3 +163,23 @@ Bigger gains would need fewer round trips per request (caching or batching UUID 
 custom bulk endpoint, #10).
 
 Resumed runs work: importing the sample twice took 3.4 s the second time, with no POSTs and no rows added.
+
+### Full SSPE import (2026-11-17)
+
+All 54,268 SSPE patients into `zl-central-import-test`, with every change above (test-only mappings,
+concurrency 30): **2 h 9 min (7.0 patients/s, steady throughout)**, 8.58 million rows created. 54,134 imported
+and 134 failed (0.25%); there were no retries at all, so no disappearing patients.
+
+| Failures | Step | Cause (from exception classes and messages, no data) |
+|---|---|---|
+| 56 | medication dispense | `TransientObjectException`: refers to a `DrugOrder` that isn't on the target |
+| 29 | encounter | `TransientObjectException`: an obs refers to a `ConceptName` that isn't on the target (more concept name mappings needed) |
+| 31 | drug order, test order, visit | HTTP 400 validation errors; no reason logged by the importer or the server |
+| 16 | drug order, test order | `AmbiguousOrderException` |
+| 2 | drug order | `MissingRequiredPropertyException: Previous Order is required for a revised order` (REVISE orders whose previous order wasn't in the export, so the exporter dropped the reference) |
+
+Verification (`verifyPatients.js`, 15 min): 51,320 verified, 2,814 failed. The differing key paths (no
+values): `testOrders[].accessionNumber` missing on the target (2,678 patients), `testOrders[].dateStopped` set on
+the target but not in the file (141) or different (9), and about 10 others (`patient.dateCreated`, address
+`preferred`, an obs location, one encounter's visit). So test orders lose their accession number on import,
+and the target stops some test orders itself.
