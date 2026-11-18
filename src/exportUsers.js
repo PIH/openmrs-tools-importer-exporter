@@ -23,6 +23,9 @@ const BATCH_SIZE = 20;
  *
  */
 async function exportAllUsers() {
+  // Create the output directory if needed; otherwise every file write fails with ENOENT
+  fs.mkdirSync(config.TARGET_DIR, { recursive: true });
+
   try {
     // Function to process a single batch of user UUIDs
     const processBatch = async (batch) => {

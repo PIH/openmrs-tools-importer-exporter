@@ -12,6 +12,9 @@ const relationshipsToExport = loadUuidsFromFile(UUID_FILE_PATH);
 const BATCH_SIZE = 20;
 
 async function exportAllRelationships() {
+  // Create the output directory if needed; otherwise every file write fails with ENOENT
+  fs.mkdirSync(config.TARGET_DIR, { recursive: true });
+
   try {
     // Function to process a single batch of relationship UUIDs
     const processBatch = async (batch) => {
