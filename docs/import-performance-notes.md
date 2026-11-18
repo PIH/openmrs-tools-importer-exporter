@@ -1,8 +1,8 @@
 # Patient import performance notes
 
 Analysis done 2026-10-28, based on the code as of commit `a2e18aa` and de-identified aggregates from
-`src/logs/app.log` (CANGE import runs, April–August 2026). Nothing here has been implemented yet; this is a
-to-do list for the next site migration.
+`src/logs/app.log` (CANGE import runs, April–August 2026). **Client-side suggestions #2–#7 were implemented
+and server settings from #9 measured on 2026-11-17; see [Results](#results-2026-11-17) at the end.**
 
 ## Current behaviour
 
@@ -120,3 +120,46 @@ change. Benchmark to beat: ~6–8 patients/s at batch size 30 (the clean 2026-04
 
 Log aggregation must stay de-identified: counts only, with UUIDs stripped. The logs contain patient identifiers, and
 company policy forbids processing patient data in cloud-based AI.
+
+## Results (2026-11-17)
+
+Measured importing SSPE patients into `zl-central-import-test`, a copy of the Mirebalais production database
+(made with `prod-restore/copy-db.sh`), on an SDK server running zl-distro 1.83.0, on the same machine as the
+importer. 300-patient fixed random sample (2,807 encounters, 600 visits, 23,840 obs, 1,505 orders). Between
+runs, `tools/cleanup-import.sh` removed the sample and `tools/table-counts.sh` confirmed the database was back
+to its exact row counts. Every run created exactly the same rows (41,665 in 17 tables) and verified the same
+way (`verifyPatients.js`: 283 verified, 17 failed verification, in the baseline too).
+
+**Disappearing patients (#1): not reproduced.** No `TransientPropertyValueException ... Visit.patient` retries in
+any run, at concurrency 10, 30 or 60.
+
+**User and provider mappings must cover the data first.** With the real SSPE mapping files, 299 of 300 patients
+failed: the sample references 79 SSPE users and 75 providers, of which the mappings cover 11 and 9, and the rest
+don't exist on the target (`Column 'creator' cannot be null`, `Visit.creator -> User`). The runs below used
+test-only mappings sending every unmapped user/provider to one existing account.
+
+| Change | Time (300 patients) | Patients/s |
+|---|---|---|
+| Baseline | ~94 s (89–99) | 3.2 |
+| Worker pool (#3) | 82.2 s | 3.6 |
+| Single-pass mappings, built once (#6) | 80.1 s | 3.7 |
+| Skip existence GETs for a new patient's children, `v=custom:(uuid)` (#5) | 76.9 s | 3.9 |
+| Per-record logs to debug, cheaper entity decoding, dirs once (#7) | 72.0 s | 4.2 |
+| No retries on ConstraintViolationException, exponential backoff (#2) | 72.8 s | 4.1 |
+| Server: OpenMRS connects to MySQL directly instead of via Docker's userland proxy | 55.9 s | 5.4 |
+| Server: `innodb_flush_log_at_trx_commit=2` | 48.7 s | 6.2 |
+| Server: `hibernate.search.indexing.listeners.enabled=false` (rebuild the index afterwards) | 44.0 s | 6.8 |
+
+Keep-alive (#4) was already in the baseline: the import shares the export's HTTP client. Concurrency 10, 30
+and 60 all took 42–44 s with the server settings, so the server is the limit and #8 wasn't pursued.
+
+**Where the server time goes** (thread dumps every 2 s during an import, method names only): about 80% of busy
+request-thread time was waiting on MySQL, mostly not inserts (~3%) but REST resolving each referenced UUID
+(`*Resource.getByUniqueId` → `HibernateUtil.getUniqueEntityByUUID`: concepts, encounters, locations, persons,
+users) one query at a time, each in its own transaction: connection checkout, begin, commit and close made up
+about half of the MySQL waiting. Encounter POSTs were 76% of request time, patient POSTs 16%. Round-trip
+latency therefore dominates, which is why bypassing Docker's proxy (147 → 72 µs per round trip) helped so much.
+Bigger gains would need fewer round trips per request (caching or batching UUID lookups in REST/core, or a
+custom bulk endpoint, #10).
+
+Resumed runs work: importing the sample twice took 3.4 s the second time, with no POSTs and no rows added.
