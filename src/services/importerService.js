@@ -3,6 +3,8 @@ import logger, {invalidIdentifierLogger} from "../utils/logger.js";
 import CONSTANTS from "../utils/constants.js";
 import {generateStrongPassword} from "../utils/utils.js";
 import config from "../utils/config.js";
+import fs from "fs";
+import path from "path";
 
 const alreadyInUseRegex = /Username \S+ or system id \S+ is already in use/;
 const duplicateIdentifierRegex = /^Identifier (\S+) already in use by another patient$/;
@@ -246,7 +248,22 @@ export async function importPatient(record) {
     }
   }
 
+  // TEMPORARY FALLBACK (HAI-1305), to let migration testing move forward until the underlying problem is fixed
+  // (UHM-9678) and the source data cleaned up: some medication dispenses point to a drug order that was voided after
+  // the medication was dispensed, so the order isn't in the export and the dispense can't be imported, which fails the
+  // whole patient. With IMPORT_SKIP_MEDICATION_DISPENSES_WITHOUT_ORDER=true, such a dispense is skipped and listed in
+  // LOG_HOME/skipped-medication-dispenses.txt instead. Remove this once HAI-1305 is done.
+  const skipDispensesWithoutOrder = config.IMPORT_SKIP_MEDICATION_DISPENSES_WITHOUT_ORDER === 'true';
+  const exportedDrugOrderUuids = new Set(record.drugOrders.map(drugOrder => drugOrder.uuid));
+
   for (const medicationDispense of record.medicationDispenses) {
+    const drugOrderUuid = medicationDispense.drugOrder?.uuid;
+    if (skipDispensesWithoutOrder && drugOrderUuid && !exportedDrugOrderUuids.has(drugOrderUuid)) {
+      logger.warn(`Skipping medication dispense ${medicationDispense.uuid} for patient ${patient.uuid}: its drug order ${drugOrderUuid} isn't in the export (temporary fallback, HAI-1305)`);
+      fs.appendFileSync(path.join(config.LOG_HOME, 'skipped-medication-dispenses.txt'),
+        `${patient.uuid},${medicationDispense.uuid},${drugOrderUuid}\n`);
+      continue;
+    }
     try {
       await postDataIfNotExists(CONSTANTS.TARGET.URLS.MEDICATION_DISPENSE, medicationDispense, medicationDispense.uuid);
       logger.info(`Imported medication dispense ${medicationDispense.uuid} for patient ${patient.uuid}`);
