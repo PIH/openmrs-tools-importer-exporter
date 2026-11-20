@@ -1,6 +1,8 @@
 import CONSTANTS from "../utils/constants.js";
 import config from "../utils/config.js";
 import {fetchData} from "./openmrsService.js";
+import logger from "../utils/logger.js";
+import { increment } from "../utils/metrics.js";
 import {sortByUuid, stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight} from "../utils/utils.js";
 
 // Must match the max-results value exportPatients.js and verifyPatients.js set on the server
