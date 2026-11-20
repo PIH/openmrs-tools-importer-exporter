@@ -187,12 +187,7 @@ export async function importPatient(record) {
       }
 
       logger.error(`Failed to import patient ${patient.uuid}: ${err.message}`);
-      if (err.response?.data?.error?.detail) {
-        logger.error(err.response.data.error.detail);
-      }
-      if(err.response?.data?.error?.globalErrors) {
-          logger.error(JSON.stringify(err.response.data.error.globalErrors));
-      }
+      logRestError(err);
       throw err;
     }
   }
@@ -207,12 +202,7 @@ export async function importPatient(record) {
       logger.debug(`Imported visit ${visit.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import visit ${visit.uuid}: ${err.message}`);
-      if (err.response?.data?.error?.detail) {
-        logger.error(err.response.data.error.detail);
-      }
-        if(err.response?.data?.error?.globalErrors) {
-            logger.error(JSON.stringify(err.response.data.error.globalErrors));
-        }
+      logRestError(err);
       throw err;
     }
   }
@@ -223,12 +213,7 @@ export async function importPatient(record) {
       logger.debug(`Imported encounter ${encounter.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import encounter ${encounter.uuid}: ${err.message}`);
-      if (err.response?.data?.error?.detail) {
-        logger.error(err.response.data.error.detail);
-      }
-      if(err.response?.data?.error?.globalErrors) {
-         logger.error(JSON.stringify(err.response.data.error.globalErrors));
-      }
+      logRestError(err);
       throw err;
     }
   }
@@ -239,12 +224,7 @@ export async function importPatient(record) {
       logger.debug(`Imported obs ${obs.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import obs ${obs.uuid}: ${err.message}`);
-      if (err.response?.data?.error?.detail) {
-        logger.error(err.response.data.error.detail);
-      }
-      if(err.response?.data?.error?.globalErrors) {
-        logger.error(JSON.stringify(err.response.data.error.globalErrors));
-      }
+      logRestError(err);
       throw err;
     }
   }
@@ -255,9 +235,7 @@ export async function importPatient(record) {
       logger.debug(`Imported test order ${testOrder.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import test order ${testOrder.uuid}: ${err.message}`);
-      if (err.response?.data?.error?.detail) {
-        logger.error(err.response.data.error.detail);
-      }
+      logRestError(err);
       throw err;
     }
   }
@@ -268,9 +246,7 @@ export async function importPatient(record) {
       logger.debug(`Imported drug order ${drugOrder.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import drug order ${drugOrder.uuid}: ${err.message}`);
-      if (err.response?.data?.error?.detail) {
-        logger.error(err.response.data.error.detail);
-      }
+      logRestError(err);
       throw err;
     }
   }
@@ -281,9 +257,7 @@ export async function importPatient(record) {
       logger.debug(`Imported medication dispense ${medicationDispense.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import medication dispense ${medicationDispense.uuid}: ${err.message}`);
-      if (err.response?.data?.error?.detail) {
-        logger.error(err.response.data.error.detail);
-      }
+      logRestError(err);
       throw err;
     }
   }
@@ -299,9 +273,7 @@ export async function importPatient(record) {
       logger.debug(`Imported program enrollment ${programEnrollment.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import program enrollment ${programEnrollment.uuid}: ${err.message}`);
-      if (err.response?.data?.error?.detail) {
-        logger.error(err.response.data.error.detail);
-      }
+      logRestError(err);
       throw err;
     }
 
@@ -312,9 +284,7 @@ export async function importPatient(record) {
           logger.debug(`Imported patient state ${state.uuid} for program ${programEnrollment.uuid}`);
         } catch (err) {
           logger.error(`Failed to import patient state ${state.uuid}: ${err.message}`);
-          if (err.response?.data?.error?.detail) {
-            logger.error(err.response.data.error.detail);
-          }
+          logRestError(err);
           throw err;
         }
       }
@@ -327,10 +297,29 @@ export async function importPatient(record) {
       logger.debug(`Imported allergy ${allergy.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import allergy ${allergy.uuid}: ${err.message}`);
-      if (err.response?.data?.error?.detail) {
-        logger.error(err.response.data.error.detail);
-      }
+      logRestError(err);
       throw err;
     }
+  }
+}
+
+// Logs the reason OpenMRS gave for rejecting a request: the message and Java detail, and for validation
+// errors (HTTP 400) the global and per-field errors, which otherwise go unreported
+function logRestError(err) {
+  const error = err.response?.data?.error;
+  if (!error) {
+    return;
+  }
+  if (error.message) {
+    logger.error(error.message);
+  }
+  if (error.detail) {
+    logger.error(error.detail);
+  }
+  if (error.globalErrors?.length) {
+    logger.error(`globalErrors: ${JSON.stringify(error.globalErrors)}`);
+  }
+  if (error.fieldErrors && Object.keys(error.fieldErrors).length) {
+    logger.error(`fieldErrors: ${JSON.stringify(error.fieldErrors)}`);
   }
 }

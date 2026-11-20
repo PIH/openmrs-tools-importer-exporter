@@ -123,11 +123,21 @@ export function sanitizeObject(obj)  {
           value = value.replace(/\d{2}\.\d{3}/g, '');
         }
 
-        acc[key] = sanitizeObject(value); // Recursively sanitize each field in the object
+        // Recursively sanitize each field in the object, dropping null (and so blank) values: the target leaves
+        // null properties out of its REST responses, so null, blank and missing all mean the same thing
+        const sanitized = sanitizeObject(value);
+        if (sanitized !== null) {
+          acc[key] = sanitized;
+        }
       }
       return acc;
     }, {});
   } else if (typeof obj === "string") {
+    // Treat blank strings as null: OpenMRS stores some empty strings from the source (e.g. a test order's
+    // accessionNumber of '') as null on the target, which isn't a real difference (see HAI-1284)
+    if (obj.trim() === "") {
+      return null;
+    }
     // Trim strings, collapse whitespace, and standardize greater than and less than
     return obj.trim()
       .replace(/\s+/g, " ")

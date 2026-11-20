@@ -47,6 +47,9 @@ function isRetryable(error) {
 }
 
 async function exportAllPatients() {
+  // Create the output directory if needed; otherwise every file write fails with ENOENT
+  await fs.mkdir(config.TARGET_DIR, { recursive: true });
+
 
   try {
     // set the max results to very high results so we don't have to fetch in batches
