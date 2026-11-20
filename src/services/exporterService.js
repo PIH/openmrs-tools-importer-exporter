@@ -2,7 +2,11 @@ import CONSTANTS from "../utils/constants.js";
 import config from "../utils/config.js";
 import {fetchData} from "./openmrsService.js";
 import logger from "../utils/logger.js";
+import { increment } from "../utils/metrics.js";
 import {sortByUuid, stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight} from "../utils/utils.js";
+
+// Must match the max-results value exportPatients.js and verifyPatients.js set on the server
+const MAX_RESULTS = 99999;
 
 export async function exportUser(userUuid, server = 'SOURCE') {
   const userUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.USER : CONSTANTS.SOURCE.URLS.USER}/${userUuid}?${CONSTANTS.USER_CUSTOM_REP}`;
@@ -31,7 +35,9 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
   const patientUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.PATIENT : CONSTANTS.SOURCE.URLS.PATIENT}/${patientUuid}?${CONSTANTS.PATIENT_CUSTOM_REP}`;
   const visitsUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.VISIT : CONSTANTS.SOURCE.URLS.VISIT}?patient=${patientUuid}&${CONSTANTS.VISIT_CUSTOM_REP}`;
   const encountersUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.ENCOUNTER : CONSTANTS.SOURCE.URLS.ENCOUNTER}?patient=${patientUuid}&s=default&${CONSTANTS.ENCOUNTER_CUSTOM_REP}`;
-  const obsUrl  = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.OBS : CONSTANTS.SOURCE.URLS.OBS}?patient=${patientUuid}&${CONSTANTS.OBS_CUSTOM_REP}`;
+  const obsBaseUrl = server === 'TARGET' ? CONSTANTS.TARGET.URLS.OBS : CONSTANTS.SOURCE.URLS.OBS;
+  // Only enough to find the encounterless obs: the encounter call already returns every encounter obs in full
+  const obsUrl  = `${obsBaseUrl}?patient=${patientUuid}&v=custom:(uuid,encounter:(uuid))`;
   const testOrdersUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.ORDER : CONSTANTS.SOURCE.URLS.ORDER}?orderTypes=${CONSTANTS.TEST_ORDER_TYPE_UUID},${CONSTANTS.PATHOLOGY_TEST_ORDER_TYPE}&patient=${patientUuid}&${CONSTANTS.TEST_ORDER_CUSTOM_REP}`;
   const drugOrderUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.ORDER : CONSTANTS.SOURCE.URLS.ORDER}?orderTypes=${CONSTANTS.DRUG_ORDER_TYPE_UUID}&patient=${patientUuid}&${CONSTANTS.DRUG_ORDER_CUSTOM_REP}`;
   const medicationDispenseUrl = `${server === 'TARGET' ? CONSTANTS.TARGET.URLS.MEDICATION_DISPENSE : CONSTANTS.SOURCE.URLS.MEDICATION_DISPENSE}?patient=${patientUuid}&${CONSTANTS.MEDICATION_DISPENSE_CUSTOM_REP}`;
@@ -49,11 +55,28 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
     fetchData(allergiesUrl, server)
   ]);
 
+  // The export raises the REST max-results setting to 99999 instead of paging, so a search that returns
+  // that many results may have been cut off
+  const searches = { visits: visitsData, encounters: encountersData, obs: obsData, testOrders: testOrderData,
+    drugOrders: drugOrderData, medicationDispenses: medicationDispenseData, programEnrollments: patientProgramsData,
+    allergies: allergiesData };
+  for (const [name, data] of Object.entries(searches)) {
+    if ((data?.results?.length ?? 0) >= MAX_RESULTS) {
+      logger.warn(`Patient ${patientUuid}: the ${name} search returned ${data.results.length} results, the maximum; it may be incomplete`);
+      increment('searches that hit the max results (may be incomplete)');
+    }
+  }
+
+  // Fetch the full representation only for the encounterless obs
+  const encounterlessObsUuids = (obsData ? obsData.results : []).filter(obs => obs.encounter == null).map(obs => obs.uuid);
+  const encounterlessObs = await Promise.all(encounterlessObsUuids.map(uuid =>
+    fetchData(`${obsBaseUrl}/${uuid}?${CONSTANTS.OBS_CUSTOM_REP}`, server)));
+
   return {
     patient: parsePatient(patientData),
     visits: parseVisits(visitsData ? visitsData.results : []),
     encounters: parseEncounters(encountersData ? encountersData.results : [], server),
-    obs: parseObsList(obsData ? obsData.results : [], server),   // note that this is only encounterless obs, the majority of the obs will be coming in via the encounter
+    obs: parseObsList(encounterlessObs, server),   // note that this is only encounterless obs, the majority of the obs will be coming in via the encounter
     testOrders: parseTestOrderList(testOrderData ? testOrderData.results : [], server),
     drugOrders: parseDrugOrderList(drugOrderData ? drugOrderData.results : [], server),
     medicationDispenses: parseMedicationDispense(medicationDispenseData ? medicationDispenseData.results : []),

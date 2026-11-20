@@ -1,8 +1,8 @@
 # Patient import performance notes
 
 Analysis done 2026-10-28, based on the code as of commit `a2e18aa` and de-identified aggregates from
-`src/logs/app.log` (CANGE import runs, April–August 2026). Nothing here has been implemented yet; this is a
-to-do list for the next site migration.
+`src/logs/app.log` (CANGE import runs, April–August 2026). **Client-side suggestions #2–#7 were implemented
+and server settings from #9 measured on 2026-11-17; see [Results](#results-2026-11-17) at the end.**
 
 ## Current behaviour
 
@@ -102,7 +102,8 @@ program states. Visits, encounters, encounterless obs, test orders, dispenses an
 parallel within their step, but this risks lock contention on the same patient.
 
 ### 9. Target server/DB tuning for the duration of the import
-- `hibernate.search.indexing_strategy=manual` during the import, then rebuild the search index afterwards (test first).
+- Turn off search indexing during the import, then rebuild the search index afterwards. Tested; see "Server settings
+  for the migration window" below for the property that works on this OpenMRS version.
 - Disable modules that react to every save (event/ActiveMQ, atomfeed, dbevent/Debezium, name phonetics, sync/HL7).
 - MySQL: `innodb_flush_log_at_trx_commit=2`, `sync_binlog=0` (or turn off the binlog), a large
   `innodb_buffer_pool_size`. Put these back afterwards.
@@ -120,3 +121,117 @@ change. Benchmark to beat: ~6–8 patients/s at batch size 30 (the clean 2026-04
 
 Log aggregation must stay de-identified: counts only, with UUIDs stripped. The logs contain patient identifiers, and
 company policy forbids processing patient data in cloud-based AI.
+
+## Results (2026-11-17)
+
+Measured importing SSPE patients into `zl-central-import-test`, a copy of the Mirebalais production database
+(made with `prod-restore/copy-db.sh`), on an SDK server running zl-distro 1.83.0, on the same machine as the
+importer. 300-patient fixed random sample (2,807 encounters, 600 visits, 23,840 obs, 1,505 orders). Between
+runs, `tools/cleanup-import.sh` removed the sample and `tools/table-counts.sh` confirmed the database was back
+to its exact row counts. Every run created exactly the same rows (41,665 in 17 tables) and verified the same
+way (`verifyPatients.js`: 283 verified, 17 failed verification, in the baseline too).
+
+**Disappearing patients (#1): not reproduced.** No `TransientPropertyValueException ... Visit.patient` retries in
+any run, at concurrency 10, 30 or 60.
+
+**User and provider mappings must cover the data first.** With the real SSPE mapping files, 299 of 300 patients
+failed: the sample references 79 SSPE users and 75 providers, of which the mappings cover 11 and 9, and the rest
+don't exist on the target (`Column 'creator' cannot be null`, `Visit.creator -> User`). The runs below used
+test-only mappings sending every unmapped user/provider to one existing account.
+
+| Change | Time (300 patients) | Patients/s |
+|---|---|---|
+| Baseline | ~94 s (89–99) | 3.2 |
+| Worker pool (#3) | 82.2 s | 3.6 |
+| Single-pass mappings, built once (#6) | 80.1 s | 3.7 |
+| Skip existence GETs for a new patient's children, `v=custom:(uuid)` (#5) | 76.9 s | 3.9 |
+| Per-record logs to debug, cheaper entity decoding, dirs once (#7) | 72.0 s | 4.2 |
+| No retries on ConstraintViolationException, exponential backoff (#2) | 72.8 s | 4.1 |
+| Server: OpenMRS connects to MySQL directly instead of via Docker's userland proxy | 55.9 s | 5.4 |
+| Server: `innodb_flush_log_at_trx_commit=2` | 48.7 s | 6.2 |
+| Server: `hibernate.search.indexing.listeners.enabled=false` (rebuild the index afterwards) | 44.0 s | 6.8 |
+
+Keep-alive (#4) was already in the baseline: the import shares the export's HTTP client. Concurrency 10, 30
+and 60 all took 42–44 s with the server settings, so the server is the limit and #8 wasn't pursued.
+
+**Where the server time goes** (thread dumps every 2 s during an import, method names only): about 80% of busy
+request-thread time was waiting on MySQL, mostly not inserts (~3%) but REST resolving each referenced UUID
+(`*Resource.getByUniqueId` → `HibernateUtil.getUniqueEntityByUUID`: concepts, encounters, locations, persons,
+users) one query at a time, each in its own transaction: connection checkout, begin, commit and close made up
+about half of the MySQL waiting. Encounter POSTs were 76% of request time, patient POSTs 16%. Round-trip
+latency therefore dominates, which is why bypassing Docker's proxy (147 → 72 µs per round trip) helped so much.
+Bigger gains would need fewer round trips per request (caching or batching UUID lookups in REST/core, or a
+custom bulk endpoint, #10).
+
+Resumed runs work: importing the sample twice took 3.4 s the second time, with no POSTs and no rows added.
+
+### Full SSPE import (2026-11-17)
+
+All 54,268 SSPE patients into `zl-central-import-test`, with every change above (test-only mappings,
+concurrency 30): **2 h 9 min (7.0 patients/s, steady throughout)**, 8.58 million rows created. 54,134 imported
+and 134 failed (0.25%); there were no retries at all, so no disappearing patients.
+
+| Failures | Step | Cause (from exception classes and messages, no data) |
+|---|---|---|
+| 56 | medication dispense | `TransientObjectException`: refers to a `DrugOrder` that isn't on the target |
+| 29 | encounter | `TransientObjectException`: an obs refers to a `ConceptName` that isn't on the target (more concept name mappings needed) |
+| 31 | drug order, test order, visit | HTTP 400 validation errors; no reason logged by the importer or the server |
+| 16 | drug order, test order | `AmbiguousOrderException` |
+| 2 | drug order | `MissingRequiredPropertyException: Previous Order is required for a revised order` (REVISE orders whose previous order wasn't in the export, so the exporter dropped the reference) |
+
+Verification (`verifyPatients.js`, 15 min): 51,320 verified, 2,814 failed. The differing key paths (no
+values): `testOrders[].accessionNumber` missing on the target (2,678 patients), `testOrders[].dateStopped` set on
+the target but not in the file (141) or different (9), and about 10 others (`patient.dateCreated`, address
+`preferred`, an obs location, one encounter's visit). So test orders lose their accession number on import,
+and the target stops some test orders itself.
+
+The causes of these failures and verification differences, and the fixes for them, are tracked on HAI-1284 and
+in separate PRs: the accession number differences are empty strings in the source, and the stopped test orders
+come from test orders being exported without their `previousOrder`.
+
+## Server settings for the migration window (manual runbook)
+
+The server-side results above came from three changes on the target server. They are made by hand, not by the
+importer. Here is what applies to the production Haiti servers and how to do each one. Puppet: the Haiti EMR
+servers run Tomcat and MySQL in Docker under `openmrs::pihemr_docker`.
+
+**1. OpenMRS connects to MySQL directly, not through a published Docker port: not needed on production.** The
+production containers use `network_mode: host`, so OpenMRS already reaches MySQL on `localhost:3306` with no Docker
+proxy in between. This gain (72 → 56 s on the sample) only applied to the local test setup. It does mean the local
+timings are closer to what production can do than the "default settings" estimate.
+
+**2. `innodb_flush_log_at_trx_commit=2` (about 13% faster on the sample).**
+- Before the import, as MySQL root in the MySQL container: `SET GLOBAL innodb_flush_log_at_trx_commit = 2;`. Check
+  it with `SELECT @@innodb_flush_log_at_trx_commit;`. It takes effect at once, with no restart.
+- After the import: `SET GLOBAL innodb_flush_log_at_trx_commit = 1;`. A MySQL restart also puts back the configured
+  value, because `SET GLOBAL` isn't saved.
+- Risk: a crash of the OS or the machine (not just MySQL) can lose about the last second of commits. Take a backup
+  right before the import, and don't leave this setting on for normal operation.
+
+**3. Search indexing off during the import, then a full rebuild (about 10% faster on the sample).**
+- Before the import: add `hibernate.search.indexing.listeners.enabled=false` to
+  `~tomcat/.OpenMRS/openmrs-runtime.properties` and restart OpenMRS. (`hibernate.search.indexing_strategy=manual`
+  is the older Hibernate Search property and doesn't apply to this version.)
+- **Puppet manages `openmrs-runtime.properties`**
+  (`mirebalais-modules/openmrs/templates/openmrs-runtime.properties.erb`), so a puppet run during the window puts
+  the file back. Don't run puppet until the import is done.
+- While indexing is off, nothing saved is added to the search index. That includes anything users enter during the
+  window. For example, a patient registered then won't be found by name search until the rebuild. The imported data
+  isn't searchable until the rebuild either.
+- After the import: remove the line, restart OpenMRS, then rebuild the whole index. Either:
+  - `POST /openmrs/ws/rest/v1/searchindexupdate` as an admin, with body `{"async": true}` to run it in the
+    background; or
+  - delete the `search.indexVersion` global property and restart. Core rebuilds the index at startup when that
+    property doesn't match its version. This is the method used when restoring production databases locally.
+- Rebuild time: **about 12 minutes** (727 s for the synchronous REST call) on the local copy of ZL Central after
+  the full SSPE test import: 654,974 patients and a 592 MB index. Measured on a developer machine, so production
+  may differ. Patient search is incomplete until the rebuild finishes.
+
+**Also:**
+- Run the importer on the same host or local network as the target server. Each patient takes hundreds of requests,
+  and every request makes many database round trips, so latency adds up fast. In the tests, the importer ran on
+  the same machine as the server.
+- The tests used 30 workers (`IMPORT_PATIENTS_BATCH_SIZE=30`). 10, 30 and 60 all took the same time. Production's
+  C3P0 pool (`hibernate.c3p0.max_size=50`) is big enough for that.
+- Put everything back afterwards: `innodb_flush_log_at_trx_commit=1`, the indexing property removed, the index
+  rebuilt, and puppet runs resumed.

@@ -157,9 +157,10 @@ export async function importPatient(record) {
 
   let retriedDuplicateIdentifier = false;
   let retriedInvalidIdentifier = false;
+  let patientResult;
   while (true) {
     try {
-      await postDataIfNotExists(CONSTANTS.TARGET.URLS.PATIENT, patient, patient.uuid);
+      patientResult = await postDataIfNotExists(CONSTANTS.TARGET.URLS.PATIENT, patient, patient.uuid);
       break;
     } catch (err) {
       // if this is a "duplicate identifier" error, append the identifier with "DPL-" and try again
@@ -191,10 +192,14 @@ export async function importPatient(record) {
     }
   }
 
+  // A patient created just now can't have any visits, encounters, etc. yet, so skip their existence checks.
+  // If the patient already existed (a resumed run or a retry), check each one as before.
+  const childOptions = { skipExistenceCheck: patientResult === 'created' };
+
   for (const visit of record.visits) {
     try {
-      await postDataIfNotExists(CONSTANTS.TARGET.URLS.VISIT, visit, visit.uuid);
-      logger.info(`Imported visit ${visit.uuid} for patient ${patient.uuid}`);
+      await postDataIfNotExists(CONSTANTS.TARGET.URLS.VISIT, visit, visit.uuid, childOptions);
+      logger.debug(`Imported visit ${visit.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import visit ${visit.uuid}: ${err.message}`);
       logRestError(err);
@@ -204,8 +209,8 @@ export async function importPatient(record) {
 
   for (const encounter of record.encounters) {
     try {
-      await postDataIfNotExists(CONSTANTS.TARGET.URLS.ENCOUNTER, encounter, encounter.uuid);
-      logger.info(`Imported encounter ${encounter.uuid} for patient ${patient.uuid}`);
+      await postDataIfNotExists(CONSTANTS.TARGET.URLS.ENCOUNTER, encounter, encounter.uuid, childOptions);
+      logger.debug(`Imported encounter ${encounter.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import encounter ${encounter.uuid}: ${err.message}`);
       logRestError(err);
@@ -215,8 +220,8 @@ export async function importPatient(record) {
 
   for (const obs of record.obs) {
     try {
-      await postDataIfNotExists(CONSTANTS.TARGET.URLS.OBS, obs, obs.uuid);
-      logger.info(`Imported obs ${obs.uuid} for patient ${patient.uuid}`);
+      await postDataIfNotExists(CONSTANTS.TARGET.URLS.OBS, obs, obs.uuid, childOptions);
+      logger.debug(`Imported obs ${obs.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import obs ${obs.uuid}: ${err.message}`);
       logRestError(err);
@@ -226,8 +231,8 @@ export async function importPatient(record) {
 
   for (const testOrder of record.testOrders) {
     try {
-      await postDataIfNotExists(CONSTANTS.TARGET.URLS.ORDER, testOrder, testOrder.uuid);
-      logger.info(`Imported test order ${testOrder.uuid} for patient ${patient.uuid}`);
+      await postDataIfNotExists(CONSTANTS.TARGET.URLS.ORDER, testOrder, testOrder.uuid, childOptions);
+      logger.debug(`Imported test order ${testOrder.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import test order ${testOrder.uuid}: ${err.message}`);
       logRestError(err);
@@ -237,8 +242,8 @@ export async function importPatient(record) {
 
   for (const drugOrder of record.drugOrders) {
     try {
-      await postDataIfNotExists(CONSTANTS.TARGET.URLS.ORDER, drugOrder, drugOrder.uuid);
-      logger.info(`Imported drug order ${drugOrder.uuid} for patient ${patient.uuid}`);
+      await postDataIfNotExists(CONSTANTS.TARGET.URLS.ORDER, drugOrder, drugOrder.uuid, childOptions);
+      logger.debug(`Imported drug order ${drugOrder.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import drug order ${drugOrder.uuid}: ${err.message}`);
       logRestError(err);
@@ -248,8 +253,8 @@ export async function importPatient(record) {
 
   for (const medicationDispense of record.medicationDispenses) {
     try {
-      await postDataIfNotExists(CONSTANTS.TARGET.URLS.MEDICATION_DISPENSE, medicationDispense, medicationDispense.uuid);
-      logger.info(`Imported medication dispense ${medicationDispense.uuid} for patient ${patient.uuid}`);
+      await postDataIfNotExists(CONSTANTS.TARGET.URLS.MEDICATION_DISPENSE, medicationDispense, medicationDispense.uuid, childOptions);
+      logger.debug(`Imported medication dispense ${medicationDispense.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import medication dispense ${medicationDispense.uuid}: ${err.message}`);
       logRestError(err);
@@ -264,8 +269,8 @@ export async function importPatient(record) {
     delete programEnrollment.states;
 
     try {
-      await postDataIfNotExists(CONSTANTS.TARGET.URLS.PROGRAM_ENROLLMENT, programEnrollment, programEnrollment.uuid);
-      logger.info(`Imported program enrollment ${programEnrollment.uuid} for patient ${patient.uuid}`);
+      await postDataIfNotExists(CONSTANTS.TARGET.URLS.PROGRAM_ENROLLMENT, programEnrollment, programEnrollment.uuid, childOptions);
+      logger.debug(`Imported program enrollment ${programEnrollment.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import program enrollment ${programEnrollment.uuid}: ${err.message}`);
       logRestError(err);
@@ -275,8 +280,8 @@ export async function importPatient(record) {
     if (states) {
       for (const state of states) {
         try {
-          await postDataIfNotExists(`${CONSTANTS.TARGET.URLS.PROGRAM_ENROLLMENT}/${programEnrollment.uuid}/state`, state, state.uuid);
-          logger.info(`Imported patient state ${state.uuid} for program ${programEnrollment.uuid}`);
+          await postDataIfNotExists(`${CONSTANTS.TARGET.URLS.PROGRAM_ENROLLMENT}/${programEnrollment.uuid}/state`, state, state.uuid, childOptions);
+          logger.debug(`Imported patient state ${state.uuid} for program ${programEnrollment.uuid}`);
         } catch (err) {
           logger.error(`Failed to import patient state ${state.uuid}: ${err.message}`);
           logRestError(err);
@@ -288,8 +293,8 @@ export async function importPatient(record) {
 
   for (const allergy of record.allergies) {
     try {
-      await postDataIfNotExists(`${CONSTANTS.TARGET.URLS.PATIENT}/${patient.uuid}/allergy`, allergy, allergy.uuid);
-      logger.info(`Imported allergy ${allergy.uuid} for patient ${patient.uuid}`);
+      await postDataIfNotExists(`${CONSTANTS.TARGET.URLS.PATIENT}/${patient.uuid}/allergy`, allergy, allergy.uuid, childOptions);
+      logger.debug(`Imported allergy ${allergy.uuid} for patient ${patient.uuid}`);
     } catch (err) {
       logger.error(`Failed to import allergy ${allergy.uuid}: ${err.message}`);
       logRestError(err);

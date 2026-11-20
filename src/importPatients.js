@@ -7,6 +7,7 @@ import {loadMappingFile, moveFile} from './services/fileService.js';
 import { getGlobalProperty, setGlobalProperty } from "./services/openmrsService.js";
 import Constants from "./utils/constants.js";
 import {replaceMappings, decodeHtmlEntitiesInObject} from "./utils/utils.js";
+import { increment, writeMetrics } from "./utils/metrics.js";
 
 const TARGET_DIR = config.TARGET_DIR;
 const SUCCESS_DIR = path.join(TARGET_DIR, 'successful');
@@ -29,6 +30,11 @@ const workflowStateMappings = WORKFLOW_STATE_MAPPINGS_FILE_PATH ? loadMappingFil
 const BATCH_SIZE = config.IMPORT_PATIENTS_BATCH_SIZE ? parseInt(config.IMPORT_PATIENTS_BATCH_SIZE, 10) : 1;
 const RETRY_MAX = config.IMPORT_PATIENTS_RETRY_MAX ? parseInt(config.IMPORT_PATIENTS_RETRY_MAX, 10) : 3;
 const RETRY_DELAY_MS = config.IMPORT_PATIENTS_RETRY_DELAY_MS ? parseInt(config.IMPORT_PATIENTS_RETRY_DELAY_MS, 10) : 2000;
+
+// Built once: replaceMappings prepares a mappings object the first time it sees it
+const allMappings = Object.assign({}, providerMappings, userMappings, patientIdentifiersMappings, workflowStateMappings, conceptNameMappings);
+
+const PROGRESS_EVERY = 100;
 
 let restoreDrugOrderRequireOutpatientQuantity = false;
 
@@ -75,26 +81,26 @@ async function importAllPatients() {
 
     logger.info(`Starting import of ${totalFiles} patient files with batch size ${BATCH_SIZE}.`);
 
-    // Divide files into chunks/batches
-    const fileBatches = chunkArray(files, BATCH_SIZE);
-
+    // A pool of BATCH_SIZE workers, each taking the next file as soon as it finishes, so a slow (or
+    // retrying) patient doesn't hold up a whole batch
+    let next = 0;
     let processedCount = 0;
-
-    // Process each batch sequentially
-    for (let i = 0; i < fileBatches.length; i++) {
-      const batch = fileBatches[i];
-      const batchStart = Date.now();
-      logger.info(`Processing batch ${i + 1}/${fileBatches.length} (${batch.length} files).`);
-      await Promise.all(batch.map(file => processFile(file)));
-      const batchElapsed = ((Date.now() - batchStart) / 1000).toFixed(2);
-      processedCount += batch.length;
-      const throughput = (batch.length / (batchElapsed || 1)).toFixed(2);
-      logger.info(`Batch ${i + 1} complete: ${batch.length} patients in ${batchElapsed}s (${throughput} patients/s). Total processed: ${processedCount}/${totalFiles}.`);
-    }
+    const worker = async () => {
+      while (next < files.length) {
+        await processFile(files[next++]);
+        if (++processedCount % PROGRESS_EVERY === 0) {
+          const elapsed = (Date.now() - overallStart) / 1000;
+          logger.info(`Progress: ${processedCount}/${totalFiles} patients in ${elapsed.toFixed(0)}s (${(processedCount / elapsed).toFixed(2)} patients/s).`);
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: Math.min(BATCH_SIZE, files.length) }, worker));
 
     const totalElapsed = ((Date.now() - overallStart) / 1000).toFixed(2);
     const overallThroughput = (totalFiles / (totalElapsed || 1)).toFixed(2);
     logger.info(`All ${totalFiles} files processed in ${totalElapsed}s (${overallThroughput} patients/s avg) with batch size ${BATCH_SIZE}.`);
+    const { summary, file } = await writeMetrics(config.LOG_HOME, 'import-metrics', { files: totalFiles, batchSize: BATCH_SIZE });
+    logger.info(`Import summary: ${JSON.stringify(summary.counters)} in ${summary.wallSeconds} s; metrics written to ${file}`);
   } catch (err) {
     logger.error(`Error during processing: ${err.message}`);
   }
@@ -137,7 +143,6 @@ async function processFile(file, retryCount = 0) {
   try {
     const content = await fs.readFile(filePath, 'utf8');
     // replace any mappings
-    const allMappings = Object.assign({}, providerMappings, userMappings, patientIdentifiersMappings, workflowStateMappings, conceptNameMappings);
     const updatedContent = replaceMappings(content, allMappings);
     const patientRecord = decodeHtmlEntitiesInObject(JSON.parse(updatedContent));
 
@@ -146,39 +151,56 @@ async function processFile(file, retryCount = 0) {
     logger.info(`Successfully processed patient from file ${file}`);
     // Move the file to the "successful" directory
     await moveFile(filePath, SUCCESS_DIR);
-    logger.info(`File ${file} successfully moved to ${SUCCESS_DIR}`);
+    logger.debug(`File ${file} successfully moved to ${SUCCESS_DIR}`);
+    increment('patients imported');
+    if (retryCount > 0) {
+      increment('patients imported after a retry');
+    }
   } catch (err) {
     if (isTransientError(err) && retryCount < RETRY_MAX) {
-      logger.warn(`TransientPropertyValueException for ${file}, retrying in ${RETRY_DELAY_MS}ms (attempt ${retryCount + 1}/${RETRY_MAX})...`);
-      await delay(RETRY_DELAY_MS);
+      const retryDelay = RETRY_DELAY_MS * 2 ** retryCount;
+      logger.warn(`TransientPropertyValueException for ${file}, retrying in ${retryDelay}ms (attempt ${retryCount + 1}/${RETRY_MAX})...`);
+      increment(`retries: ${errorClass(err)}`);
+      // On a retry the patient already exists, so only its missing children are posted (each existing one
+      // costs one small GET)
+      await delay(retryDelay);
       return processFile(file, retryCount + 1);
     }
     logger.error(`Error processing file ${file}: ${err.message}`);
+    increment('patients failed');
+    increment(`failures: ${errorClass(err)}`);
     await moveFile(filePath, FAILED_DIR);
     logger.info(`File ${file} moved to ${FAILED_DIR} due to errors.`);
   }
 }
 
+// A label for an error with no identifiers in it: the Java exception class(es) in the OpenMRS error, or
+// the HTTP status, for counting failures by type
+function errorClass(err) {
+  const text = `${err.response?.data?.error?.detail ?? ''} ${err.response?.data?.error?.message ?? ''} ${err.message ?? ''}`;
+  const classes = [...new Set(text.match(/\b[A-Z][A-Za-z]*(Exception|Error)\b/g) ?? [])];
+  const status = err.response?.status ? `HTTP ${err.response.status}` : 'no HTTP response';
+  // Validation errors (HTTP 400) have no exception class; their error codes (message keys such as
+  // Order.error.xyz, with field names for field errors) say what was wrong without any data
+  const error = err.response?.data?.error;
+  const codes = [...new Set([
+    ...(error?.globalErrors ?? []).map(e => e.code),
+    ...Object.entries(error?.fieldErrors ?? {}).flatMap(([field, errors]) => errors.map(e => `${field}: ${e.code}`)),
+  ].filter(Boolean))];
+  const labels = [...classes, ...codes];
+  return labels.length > 0 ? `${status} ${labels.join(', ')}` : status;
+}
+
+// Only the "newly created patient not found yet" failure is worth retrying. ConstraintViolationException
+// isn't: on the SSPE data every one was a missing creator (a mapping problem) and failed again each time.
 function isTransientError(err) {
   const detail = err.response?.data?.error?.detail ?? '';
   const message = err.message ?? '';
-  return (
-    detail.includes('TransientPropertyValueException') || message.includes('TransientPropertyValueException') ||
-    detail.includes('ConstraintViolationException') || message.includes('ConstraintViolationException')
-  );
+  return detail.includes('TransientPropertyValueException') || message.includes('TransientPropertyValueException');
 }
 
 function delay(ms) {
   return new Promise(resolve => setTimeout(resolve, ms));
-}
-
-// Helper function to chunk an array into smaller batches
-function chunkArray(array, size) {
-  const chunks = [];
-  for (let i = 0; i < array.length; i += size) {
-    chunks.push(array.slice(i, i + size));
-  }
-  return chunks;
 }
 
 importAllPatients().catch(err => logger.error(`Fatal error: ${err.message}`));
