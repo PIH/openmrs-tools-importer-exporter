@@ -36,11 +36,12 @@ const RETRY_DELAY_MS = Number(config.EXPORT_PATIENTS_RETRY_DELAY_MS) || 2000;
 const failedUuids = [];
 
 // Worth retrying: no response (connection problem or timeout), server errors, an expired session or
-// throttling. Other errors (e.g. 404, or a bug while parsing) would fail the same way again.
+// throttling. Other errors (e.g. 404, a bug while parsing, or a file-system error such as a full disk)
+// would fail the same way again.
 function isRetryable(error) {
   const status = error.response?.status;
   if (status === undefined) {
-    return Boolean(error.isAxiosError || error.code);
+    return Boolean(error.isAxiosError) || error.message?.startsWith('Bad Response - Unauthenticated?');
   }
   return status >= 500 || [401, 408, 429].includes(status);
 }
