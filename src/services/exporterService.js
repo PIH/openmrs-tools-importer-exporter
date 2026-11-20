@@ -3,6 +3,7 @@ import config from "../utils/config.js";
 import {fetchData} from "./openmrsService.js";
 import logger from "../utils/logger.js";
 import { increment } from "../utils/metrics.js";
+import * as voidedDispenseOrders from "./voidedDispenseOrders.js";
 import {sortByUuid, stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight} from "../utils/utils.js";
 
 // Must match the max-results value exportPatients.js and verifyPatients.js set on the server
@@ -72,7 +73,7 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
   const encounterlessObs = await Promise.all(encounterlessObsUuids.map(uuid =>
     fetchData(`${obsBaseUrl}/${uuid}?${CONSTANTS.OBS_CUSTOM_REP}`, server)));
 
-  return {
+  const record = {
     patient: parsePatient(patientData),
     visits: parseVisits(visitsData ? visitsData.results : []),
     encounters: parseEncounters(encountersData ? encountersData.results : [], server),
@@ -83,6 +84,16 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
     programEnrollments: parseProgramEnrollments(patientProgramsData ? patientProgramsData.results : []),
     allergies: parseAllergies(allergiesData ? allergiesData.results : [])
   };
+
+  // TEMPORARY (HAI-1305): the voided drug orders and encounters that dispenses point to
+  if (voidedDispenseOrders.isEnabled()) {
+    const voided = await voidedDispenseOrders.exportVoidedRecordsForDispenses(record, server,
+      { parseDrugOrder, parseEncounter: (encounter, s) => parseEncounters([encounter], s)[0] });
+    if (voided) {
+      record[voidedDispenseOrders.VOIDED_RECORDS_KEY] = voided;
+    }
+  }
+  return record;
 
 }
 
