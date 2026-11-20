@@ -99,6 +99,14 @@ export async function postDataIfNotExists(resourceUrl, data, uuid, { skipExisten
 }
 
 
+// DELETE on the target; without purge=true, the REST API voids or retires the resource
+export async function deleteData(url) {
+  const response = await timed('DELETE', url, () => targetClient.delete(url));
+  if (response.status !== 204 && response.status !== 200) {
+    throw new Error(`Failed to delete ${url}, status code: ${response.status}`);
+  }
+}
+
 export async function postData(resourceUrl, data) {
   const response = await targetClient.post(resourceUrl, data);
   return response.data;

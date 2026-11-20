@@ -1,4 +1,5 @@
 import {postDataIfNotExists} from "./openmrsService.js";
+import * as voidedDispenseOrders from "./voidedDispenseOrders.js";
 import logger, {invalidIdentifierLogger} from "../utils/logger.js";
 import CONSTANTS from "../utils/constants.js";
 import {generateStrongPassword} from "../utils/utils.js";
@@ -240,6 +241,9 @@ export async function importPatient(record) {
     }
   }
 
+  // TEMPORARY (HAI-1305)
+  await voidedDispenseOrders.importVoidedRecordsBeforeDrugOrders(record);
+
   for (const drugOrder of record.drugOrders) {
     try {
       await postDataIfNotExists(CONSTANTS.TARGET.URLS.ORDER, drugOrder, drugOrder.uuid, childOptions);
@@ -250,6 +254,9 @@ export async function importPatient(record) {
       throw err;
     }
   }
+
+  // TEMPORARY (HAI-1305)
+  await voidedDispenseOrders.importVoidedRecordsAfterDrugOrders(record);
 
   for (const medicationDispense of record.medicationDispenses) {
     try {
