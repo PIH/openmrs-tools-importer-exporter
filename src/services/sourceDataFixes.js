@@ -42,6 +42,12 @@
 //   autoExpireBeforeStart (FIX_AUTO_EXPIRE_BEFORE_START): a drug order with a duration of 0, which core turns into
 //   an auto-expire date one second before the start (Order.error.dateActivatedAfterAutoExpireDate). Fix: expire it
 //   at its start. Only for a gap of one second; core keeps an auto-expire date that is already set.
+//   overlappingDrugOrders (FIX_OVERLAPPING_DRUG_ORDERS): two drug orders for the same drug (same concept, drug and
+//   care setting, neither replacing the other) where the later one starts while the earlier one is still active
+//   (AmbiguousOrderException: Order.cannot.have.more.than.one). Core only checks for this at save time against the
+//   orders active *now* for a same-day save, so an earlier order that had already ended by then wasn't seen. Fix:
+//   stop the earlier order one second before the later one starts. Skipped (and logged) when an order stops the
+//   earlier one, since that order would still overlap. Runs last, on the final start and stop dates.
 //
 // On by default; set a rule's flag to false to turn it off. To remove: delete this file and its calls in
 // exporterService.js, exportPatients.js and verifyPatients.js.
@@ -80,6 +86,10 @@ export function isStopWithoutStopperFixEnabled() {
 
 export function isAutoExpireBeforeStartFixEnabled() {
   return config.FIX_AUTO_EXPIRE_BEFORE_START !== 'false';
+}
+
+export function isOverlappingDrugOrdersFixEnabled() {
+  return config.FIX_OVERLAPPING_DRUG_ORDERS !== 'false';
 }
 
 // REST dates look like 2023-06-15T10:14:00.000-0500. The export strips the zone from times at midnight and one
@@ -301,6 +311,42 @@ function fixOrderBeforeEncounter(record, listName, fixes) {
   }
 }
 
+// When an order stops being active (its stop or auto-expire date, whichever is first), as toSecond; undefined if never
+function endOf(order) {
+  const ends = [order.dateStopped, order.autoExpireDate].map(toSecond).filter(Boolean).sort();
+  return ends[0];
+}
+
+/** Drug orders for the same drug where a later one starts while an earlier one is still active. */
+function fixOverlappingDrugOrders(record, fixes) {
+  const orders = (record.drugOrders ?? []).filter(o => o.action !== 'DISCONTINUE' && toSecond(o.dateActivated)
+    && o.concept?.uuid && (o.drug?.uuid || o.drugNonCoded) && o.careSetting?.uuid);
+  const key = o => [o.concept?.uuid, o.drug?.uuid, o.drugNonCoded, o.careSetting?.uuid].join('|');
+  const stopped = new Set((record.drugOrders ?? []).map(o => o.previousOrder?.uuid).filter(Boolean));
+  const linked = (a, b) => a.previousOrder?.uuid === b.uuid || b.previousOrder?.uuid === a.uuid;
+  const sorted = [...orders].sort((a, b) => toSecond(a.dateActivated).localeCompare(toSecond(b.dateActivated)));
+  for (const earlier of sorted) {
+    const start = toSecond(earlier.dateActivated);
+    const end = endOf(earlier);
+    // the first later order for the same drug that starts while this one is still active
+    const later = sorted.find(o => o !== earlier && key(o) === key(earlier) && !linked(o, earlier)
+      && toSecond(o.dateActivated) > start && (!end || toSecond(o.dateActivated) < end));
+    if (!later) {
+      continue;
+    }
+    if (stopped.has(earlier.uuid)) {
+      logger.warn(`Patient ${record.patient.uuid}: drug order ${earlier.uuid} overlaps ${later.uuid} for the same drug, but another order stops it; left as it is`);
+      increment('HAI-1306 overlapping drug orders left as they are');
+      continue;
+    }
+    const newStop = shiftSeconds(later.dateActivated, -1);
+    fixes.push({ rule: 'overlappingDrugOrders', list: 'drugOrders', uuid: earlier.uuid, field: 'dateStopped',
+      from: earlier.dateStopped, to: newStop });
+    earlier.dateStopped = newStop;
+    increment('HAI-1306 overlapping drug orders stopped before the next one');
+  }
+}
+
 /** Call on a SOURCE export record, after its orders are sequenced. Changes the record in place. */
 export function applySourceDataFixes(record) {
   const fixes = [];
@@ -331,6 +377,9 @@ export function applySourceDataFixes(record) {
   if (isAutoExpireBeforeStartFixEnabled()) {
     fixAutoExpireBeforeStart(record.drugOrders ?? [], 'drugOrders', fixes);
     fixAutoExpireBeforeStart(record.testOrders ?? [], 'testOrders', fixes);
+  }
+  if (isOverlappingDrugOrdersFixEnabled()) {
+    fixOverlappingDrugOrders(record, fixes);
   }
   if (fixes.length > 0) {
     record[FIXES_KEY] = fixes;

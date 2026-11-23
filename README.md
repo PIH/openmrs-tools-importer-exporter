@@ -61,3 +61,6 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
     as core does when a discontinuation or revision is voided.
   - *Auto-expire one second before the start* (`FIX_AUTO_EXPIRE_BEFORE_START`, on by default; `false` turns it off): a
     drug order with a duration of 0 (core sets its auto-expire one second before its start) expires at its start.
+  - *Overlapping drug orders for the same drug* (`FIX_OVERLAPPING_DRUG_ORDERS`, on by default; `false` turns it off):
+    when a drug order starts while an earlier order for the same drug is still active, the earlier one is stopped one
+    second before it. Left as it is (and logged) when another order stops the earlier one.
