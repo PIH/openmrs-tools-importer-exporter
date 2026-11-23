@@ -56,3 +56,5 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
   - *Stopped before it started, with no stopping order* (`FIX_STOP_WITHOUT_STOPPER`, on by default; `false` turns it
     off): an order whose renewal was voided but which stayed stopped (before it started) has its stop date cleared,
     as core does when a discontinuation or revision is voided.
+  - *Auto-expire one second before the start* (`FIX_AUTO_EXPIRE_BEFORE_START`, on by default; `false` turns it off): a
+    drug order with a duration of 0 (core sets its auto-expire one second before its start) expires at its start.

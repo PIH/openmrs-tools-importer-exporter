@@ -34,6 +34,9 @@
 //   order stops (the renewal that stopped it was voided, and voiding a RENEW doesn't reopen the order it renewed:
 //   UHM-9685). Fix: clear the stop date, as core does when a DISCONTINUE or REVISE is voided. Runs last, after
 //   the rules that fix stops set by an existing order.
+//   autoExpireBeforeStart (FIX_AUTO_EXPIRE_BEFORE_START): a drug order with a duration of 0, which core turns into
+//   an auto-expire date one second before the start (Order.error.dateActivatedAfterAutoExpireDate). Fix: expire it
+//   at its start. Only for a gap of one second; core keeps an auto-expire date that is already set.
 //
 // On by default; set a rule's flag to false to turn it off. To remove: delete this file and its calls in
 // exporterService.js, exportPatients.js and verifyPatients.js.
@@ -64,6 +67,10 @@ export function isRenewalBeforeOriginalFixEnabled() {
 
 export function isStopWithoutStopperFixEnabled() {
   return config.FIX_STOP_WITHOUT_STOPPER !== 'false';
+}
+
+export function isAutoExpireBeforeStartFixEnabled() {
+  return config.FIX_AUTO_EXPIRE_BEFORE_START !== 'false';
 }
 
 // REST dates look like 2023-06-15T10:14:00.000-0500. The export strips the zone from times at midnight and one
@@ -245,6 +252,21 @@ function fixStopWithoutStopper(orders, listName, allOrders, fixes) {
   }
 }
 
+/** Orders that auto-expire one second before they start. */
+function fixAutoExpireBeforeStart(orders, listName, fixes) {
+  for (const order of orders) {
+    if (!order.autoExpireDate || !toSecond(order.dateActivated)
+      || toSecond(plusOneSecond(order.autoExpireDate)) !== toSecond(order.dateActivated)
+      || toSecond(order.dateActivated).endsWith('000000')) {   // core moves a midnight auto-expire to 23:59:59
+      continue;
+    }
+    fixes.push({ rule: 'autoExpireBeforeStart', list: listName, uuid: order.uuid, field: 'autoExpireDate',
+      from: order.autoExpireDate, to: order.dateActivated });
+    order.autoExpireDate = order.dateActivated;
+    increment('HAI-1306 auto-expire dates moved to the start');
+  }
+}
+
 /** Call on a SOURCE export record, after its orders are sequenced. Changes the record in place. */
 export function applySourceDataFixes(record) {
   const fixes = [];
@@ -267,6 +289,10 @@ export function applySourceDataFixes(record) {
     const allOrders = [...(record.drugOrders ?? []), ...(record.testOrders ?? [])];
     fixStopWithoutStopper(record.drugOrders ?? [], 'drugOrders', allOrders, fixes);
     fixStopWithoutStopper(record.testOrders ?? [], 'testOrders', allOrders, fixes);
+  }
+  if (isAutoExpireBeforeStartFixEnabled()) {
+    fixAutoExpireBeforeStart(record.drugOrders ?? [], 'drugOrders', fixes);
+    fixAutoExpireBeforeStart(record.testOrders ?? [], 'testOrders', fixes);
   }
   if (fixes.length > 0) {
     record[FIXES_KEY] = fixes;
