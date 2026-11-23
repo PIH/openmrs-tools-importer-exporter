@@ -10,6 +10,7 @@ import {replaceMappings,sanitizeObject,convertHaiti2016TimesToDaylightSavings} f
 import {getGlobalProperty, setGlobalProperty} from "./services/openmrsService.js";
 import Constants from "./utils/constants.js";
 import * as voidedDispenseOrders from "./services/voidedDispenseOrders.js";
+import * as sourceDataFixes from "./services/sourceDataFixes.js";
 
 const USER_MAPPINGS_FILE_PATH = config.EXPORT_USER_MAPPINGS_FILE ? path.join(config.EXPORT_USER_MAPPINGS_FILE) : undefined;
 const userMappings = USER_MAPPINGS_FILE_PATH ? loadMappingFile(USER_MAPPINGS_FILE_PATH) : [];
@@ -108,6 +109,9 @@ async function verifyPatients() {
           // TEMPORARY (HAI-1305)
           voidedDispenseOrders.normalizeForVerification(patientRecord);
           voidedDispenseOrders.normalizeForVerification(parsedFileContents);
+
+          // TEMPORARY (HAI-1306)
+          sourceDataFixes.normalizeForVerification(patientRecord, parsedFileContents);
 
           // Sanitize both objects (remove whitespace and normalize structure)
           const sanitizedPatientRecord = sanitizeObject(patientRecord);

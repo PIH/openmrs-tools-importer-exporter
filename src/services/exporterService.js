@@ -4,6 +4,7 @@ import {fetchData} from "./openmrsService.js";
 import logger from "../utils/logger.js";
 import { increment } from "../utils/metrics.js";
 import * as voidedDispenseOrders from "./voidedDispenseOrders.js";
+import * as sourceDataFixes from "./sourceDataFixes.js";
 import {sortByUuid, stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight} from "../utils/utils.js";
 
 // Must match the max-results value exportPatients.js and verifyPatients.js set on the server
@@ -92,6 +93,11 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
     if (voided) {
       record[voidedDispenseOrders.VOIDED_RECORDS_KEY] = voided;
     }
+  }
+
+  // TEMPORARY (HAI-1306): corrections for source data the target's validation rejects
+  if (server === 'SOURCE') {
+    sourceDataFixes.applySourceDataFixes(record);
   }
   return record;
 
