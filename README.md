@@ -46,6 +46,9 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
   accepted but today's core rejects, one rule at a time. Each change is listed in the patient file under
   `sourceDataFixesHAI1306` and in `LOG_HOME/source-data-fixes.csv` (rule, patient, order, field, old and new
   value); verification takes the changes into account. The code is in `src/services/sourceDataFixes.js`.
+  - *Encounters after their visit's stop* (`FIX_VISIT_STOP_FOR_ENCOUNTERS`, on by default; `false` turns it off): a
+    visit's stop is extended to an encounter dated after it, if the encounter is on the same day as the visit's stop
+    and the extended visit wouldn't reach a later visit; other cases are logged for review and left as they are.
   - *Orders before their encounter* (`FIX_ORDER_BEFORE_ENCOUNTER`, on by default; `false` turns it off): an order
     activated before its encounter (the encounter was moved later to fit its visit, without its orders) is activated
     at the encounter's time.

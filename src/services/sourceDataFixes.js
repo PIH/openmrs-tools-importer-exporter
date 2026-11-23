@@ -11,6 +11,10 @@
 // order's stop date, to the renewal's dateActivated minus one second (see UHM-9681 and HAI-1306).
 //
 // Rules so far (applied in this order):
+//   visitStopForEncounters (FIX_VISIT_STOP_FOR_ENCOUNTERS): an encounter dated after its visit's stop (the visit
+//   was ended, then a form was entered for it later the same day). ZL Central imports it without its visit. Fix:
+//   extend the visit's stop to the encounter, but only for an encounter on the same day as the visit's stop and
+//   only if that doesn't reach a later visit of the patient; otherwise it's logged for review and left as it is.
 //   orderBeforeEncounter (FIX_ORDER_BEFORE_ENCOUNTER): an order activated before its encounter
 //   (Order.error.encounterDatetimeAfterDateActivated). The encounter was moved later to fit its visit (the visit's
 //   start was edited, or the encounter was put in a visit created after it) and its orders weren't moved with it.
@@ -60,6 +64,10 @@ import { VOIDED_RECORDS_KEY } from "./voidedDispenseOrders.js";
 
 export const FIXES_KEY = 'sourceDataFixesHAI1306';
 const LOG_FILE = 'source-data-fixes.csv';
+
+export function isVisitStopForEncountersFixEnabled() {
+  return config.FIX_VISIT_STOP_FOR_ENCOUNTERS !== 'false';
+}
 
 export function isOrderBeforeEncounterFixEnabled() {
   return config.FIX_ORDER_BEFORE_ENCOUNTER !== 'false';
@@ -287,6 +295,39 @@ function fixAutoExpireBeforeStart(orders, listName, fixes) {
   }
 }
 
+/** Encounters dated after their visit's stop. */
+function fixVisitStopForEncounters(record, fixes) {
+  const visits = record.visits ?? [];
+  for (const visit of visits) {
+    const stop = toSecond(visit.stopDatetime);
+    if (!stop) {
+      continue;
+    }
+    const after = (record.encounters ?? []).filter(e => e.visit?.uuid === visit.uuid && toSecond(e.encounterDatetime) > stop);
+    if (after.length === 0) {
+      continue;
+    }
+    const sameDay = after.filter(e => toSecond(e.encounterDatetime).slice(0, 8) === stop.slice(0, 8));
+    const latest = [...sameDay].sort((a, b) => toSecond(a.encounterDatetime).localeCompare(toSecond(b.encounterDatetime))).at(-1);
+    const newStop = latest && toSecond(latest.encounterDatetime);
+    const start = toSecond(visit.startDatetime);
+    const reachesLaterVisit = newStop && visits.some(v => v !== visit && toSecond(v.startDatetime) > start
+      && toSecond(v.startDatetime) <= newStop);
+    if (!latest || reachesLaterVisit || sameDay.length < after.length) {
+      logger.warn(`Patient ${record.patient.uuid}: visit ${visit.uuid} has ${after.length} encounter(s) after its stop`
+        + (latest && !reachesLaterVisit ? `; extended only over the ${sameDay.length} on the same day` : '; left as it is') + ' (review)');
+      increment('HAI-1306 encounters after their visit stop left for review', after.length - (latest && !reachesLaterVisit ? sameDay.length : 0));
+    }
+    if (!latest || reachesLaterVisit) {
+      continue;
+    }
+    fixes.push({ rule: 'visitStopForEncounters', list: 'visits', uuid: visit.uuid, field: 'stopDatetime',
+      from: visit.stopDatetime, to: latest.encounterDatetime });
+    visit.stopDatetime = latest.encounterDatetime;
+    increment('HAI-1306 visit stops extended to cover encounters');
+  }
+}
+
 /** Orders activated before their encounter. */
 function fixOrderBeforeEncounter(record, listName, fixes) {
   const orders = record[listName] ?? [];
@@ -355,6 +396,9 @@ function fixOverlappingDrugOrders(record, fixes) {
 /** Call on a SOURCE export record, after its orders are sequenced. Changes the record in place. */
 export function applySourceDataFixes(record) {
   const fixes = [];
+  if (isVisitStopForEncountersFixEnabled()) {
+    fixVisitStopForEncounters(record, fixes);
+  }
   if (isOrderBeforeEncounterFixEnabled()) {
     fixOrderBeforeEncounter(record, 'drugOrders', fixes);
     fixOrderBeforeEncounter(record, 'testOrders', fixes);
@@ -431,7 +475,7 @@ export function normalizeForVerification(targetRecord, fileRecord) {
   }
   delete fileRecord[FIXES_KEY];
   for (const fix of fixes) {
-    const order = targetRecord?.[fix.list]?.find(o => o.uuid === fix.uuid);   // an order or an encounter
+    const order = targetRecord?.[fix.list]?.find(o => o.uuid === fix.uuid);   // an order, encounter or visit
     const targetValue = order?.[fix.field];
     if (targetValue && fix.to && targetValue !== fix.to && !DATE_REGEX.exec(fix.to)[8]
       && toSecond(targetValue) === toSecond(fix.to)) {
