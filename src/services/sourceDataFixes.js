@@ -30,6 +30,10 @@
 //   form entered later for the same visit, at the visit's start time, renewing orders from a later encounter), so
 //   the renewed order was stopped before it started. Fix: activate the renewal one second after the order it
 //   renews, and stop that order at its own activation time (as for same-second renewals).
+//   stopBeforeStartNoStopper (FIX_STOP_WITHOUT_STOPPER): an order stopped before it started that no exported
+//   order stops (the renewal that stopped it was voided, and voiding a RENEW doesn't reopen the order it renewed:
+//   UHM-9685). Fix: clear the stop date, as core does when a DISCONTINUE or REVISE is voided. Runs last, after
+//   the rules that fix stops set by an existing order.
 //
 // On by default; set a rule's flag to false to turn it off. To remove: delete this file and its calls in
 // exporterService.js, exportPatients.js and verifyPatients.js.
@@ -56,6 +60,10 @@ export function isLabCancelTimesFixEnabled() {
 
 export function isRenewalBeforeOriginalFixEnabled() {
   return config.FIX_RENEWALS_BEFORE_ORIGINAL !== 'false';
+}
+
+export function isStopWithoutStopperFixEnabled() {
+  return config.FIX_STOP_WITHOUT_STOPPER !== 'false';
 }
 
 // REST dates look like 2023-06-15T10:14:00.000-0500. The export strips the zone from times at midnight and one
@@ -218,6 +226,25 @@ function fixRenewalsBeforeOriginal(orders, listName, fixes) {
   }
 }
 
+/**
+ * Orders stopped before they started that no exported order stops. The export leaves out voided orders, so a
+ * voided renewal isn't there; nothing in the patient's record stops the order any more.
+ */
+function fixStopWithoutStopper(orders, listName, allOrders, fixes) {
+  const stopped = new Set(allOrders.map(order => order.previousOrder?.uuid).filter(Boolean));
+  for (const order of orders) {
+    const start = toSecond(order.dateActivated);
+    const stop = toSecond(order.dateStopped);
+    if (!start || !stop || !(stop < start) || stopped.has(order.uuid)) {
+      continue;
+    }
+    fixes.push({ rule: 'stopBeforeStartNoStopper', list: listName, uuid: order.uuid, field: 'dateStopped',
+      from: order.dateStopped, to: null });
+    order.dateStopped = null;
+    increment('HAI-1306 stop dates cleared (no stopping order)');
+  }
+}
+
 /** Call on a SOURCE export record, after its orders are sequenced. Changes the record in place. */
 export function applySourceDataFixes(record) {
   const fixes = [];
@@ -235,6 +262,11 @@ export function applySourceDataFixes(record) {
   if (isRenewalBeforeOriginalFixEnabled()) {
     fixRenewalsBeforeOriginal(record.drugOrders ?? [], 'drugOrders', fixes);
     fixRenewalsBeforeOriginal(record.testOrders ?? [], 'testOrders', fixes);
+  }
+  if (isStopWithoutStopperFixEnabled()) {
+    const allOrders = [...(record.drugOrders ?? []), ...(record.testOrders ?? [])];
+    fixStopWithoutStopper(record.drugOrders ?? [], 'drugOrders', allOrders, fixes);
+    fixStopWithoutStopper(record.testOrders ?? [], 'testOrders', allOrders, fixes);
   }
   if (fixes.length > 0) {
     record[FIXES_KEY] = fixes;
@@ -283,7 +315,7 @@ export function normalizeForVerification(targetRecord, fileRecord) {
   for (const fix of fixes) {
     const order = targetRecord?.[fix.list]?.find(o => o.uuid === fix.uuid);   // an order or an encounter
     const targetValue = order?.[fix.field];
-    if (targetValue && targetValue !== fix.to && !DATE_REGEX.exec(fix.to)[8]
+    if (targetValue && fix.to && targetValue !== fix.to && !DATE_REGEX.exec(fix.to)[8]
       && toSecond(targetValue) === toSecond(fix.to)) {
       order[fix.field] = fix.to;
     }

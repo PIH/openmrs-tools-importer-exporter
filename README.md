@@ -53,3 +53,6 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
   - *Renewals before the order they renew* (`FIX_RENEWALS_BEFORE_ORIGINAL`, on by default; `false` turns it off): a
     renewal entered later in a form dated at the visit's start, before the order it renews, is moved to one second
     after that order, which is stopped at its own activation time.
+  - *Stopped before it started, with no stopping order* (`FIX_STOP_WITHOUT_STOPPER`, on by default; `false` turns it
+    off): an order whose renewal was voided but which stayed stopped (before it started) has its stop date cleared,
+    as core does when a discontinuation or revision is voided.
