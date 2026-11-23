@@ -36,6 +36,12 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
   encounters if voided, under `voidedRecordsForDispenses`; the import posts them and voids them again on the target
   with the reason "copied from source server due to HAI-1305", so the dispenses import as they are. On by default;
   set `INCLUDE_VOIDED_DISPENSE_ORDERS=false` to turn it off. The code is in `src/services/voidedDispenseOrders.js`.
+- **Voided previous orders (HAI-1306).** Some orders revise, renew or discontinue an order that was voided afterwards
+  (its encounter deleted, or removed from its form). The export includes those voided previous orders, and their
+  encounters if voided, under `voidedRecordsForDispenses.voidedPreviousOrders`; the import posts each one just before
+  the order that refers to it, so that order stops it as on the source, and voids it again afterwards with the reason
+  "copied from source server due to HAI-1306". On by default; set `INCLUDE_VOIDED_PREVIOUS_ORDERS=false` to turn it
+  off. Same module as above.
 - **Source data the target's validation rejects (HAI-1306).** The export corrects a few patterns that SSPE and HSN
   accepted but today's core rejects, one rule at a time. Each change is listed in the patient file under
   `sourceDataFixesHAI1306` and in `LOG_HOME/source-data-fixes.csv` (rule, patient, order, field, old and new

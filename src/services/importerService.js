@@ -246,6 +246,7 @@ export async function importPatient(record) {
 
   for (const drugOrder of record.drugOrders) {
     try {
+      await voidedDispenseOrders.importVoidedPreviousOrderFor(record, drugOrder);   // TEMPORARY (HAI-1306)
       await postDataIfNotExists(CONSTANTS.TARGET.URLS.ORDER, drugOrder, drugOrder.uuid, childOptions);
       logger.debug(`Imported drug order ${drugOrder.uuid} for patient ${patient.uuid}`);
     } catch (err) {

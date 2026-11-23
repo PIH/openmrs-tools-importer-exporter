@@ -56,6 +56,7 @@ import path from "path";
 import config from "../utils/config.js";
 import logger from "../utils/logger.js";
 import { increment } from "../utils/metrics.js";
+import { VOIDED_RECORDS_KEY } from "./voidedDispenseOrders.js";
 
 export const FIXES_KEY = 'sourceDataFixesHAI1306';
 const LOG_FILE = 'source-data-fixes.csv';
@@ -322,7 +323,11 @@ function fixOverlappingDrugOrders(record, fixes) {
   const orders = (record.drugOrders ?? []).filter(o => o.action !== 'DISCONTINUE' && toSecond(o.dateActivated)
     && o.concept?.uuid && (o.drug?.uuid || o.drugNonCoded) && o.careSetting?.uuid);
   const key = o => [o.concept?.uuid, o.drug?.uuid, o.drugNonCoded, o.careSetting?.uuid].join('|');
-  const stopped = new Set((record.drugOrders ?? []).map(o => o.previousOrder?.uuid).filter(Boolean));
+  // Orders stopped by another order, including the voided orders carried over for HAI-1305/HAI-1306 (posted on the
+  // target before being voided again, so they stop their previous order there as on the source)
+  const voided = record[VOIDED_RECORDS_KEY] ?? {};
+  const stopped = new Set([...(record.drugOrders ?? []), ...(voided.drugOrders ?? []), ...(voided.voidedPreviousOrders ?? [])]
+    .map(o => o.previousOrder?.uuid).filter(Boolean));
   const linked = (a, b) => a.previousOrder?.uuid === b.uuid || b.previousOrder?.uuid === a.uuid;
   const sorted = [...orders].sort((a, b) => toSecond(a.dateActivated).localeCompare(toSecond(b.dateActivated)));
   for (const earlier of sorted) {
