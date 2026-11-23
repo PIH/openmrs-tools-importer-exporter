@@ -10,7 +10,12 @@
 // with Order.error.dateActivatedAfterDiscontinuedDate. For a RENEW, htmlformentry (not core) set the previous
 // order's stop date, to the renewal's dateActivated minus one second (see UHM-9681 and HAI-1306).
 //
-// Rules so far:
+// Rules so far (applied in this order):
+//   orderBeforeEncounter (FIX_ORDER_BEFORE_ENCOUNTER): an order activated before its encounter
+//   (Order.error.encounterDatetimeAfterDateActivated). The encounter was moved later to fit its visit (the visit's
+//   start was edited, or the encounter was put in a visit created after it) and its orders weren't moved with it.
+//   Fix: activate the order at its encounter's time. Skipped if that would put the start after the order's stop
+//   or auto-expire date, or after an order that stops it. Runs first, so the other rules see the new start.
 //   sameSecondRenewal (FIX_SAME_SECOND_RENEWALS): a renewal activated in the same second as the order it renews
 //   (retrospective entry puts both encounters at the visit's start time), so the previous order was stopped one
 //   second before it started. Fix: activate the renewal one second after the previous order, and stop the
@@ -48,6 +53,10 @@ import { increment } from "../utils/metrics.js";
 
 export const FIXES_KEY = 'sourceDataFixesHAI1306';
 const LOG_FILE = 'source-data-fixes.csv';
+
+export function isOrderBeforeEncounterFixEnabled() {
+  return config.FIX_ORDER_BEFORE_ENCOUNTER !== 'false';
+}
 
 export function isSameSecondRenewalFixEnabled() {
   return config.FIX_SAME_SECOND_RENEWALS !== 'false';
@@ -267,9 +276,38 @@ function fixAutoExpireBeforeStart(orders, listName, fixes) {
   }
 }
 
+/** Orders activated before their encounter. */
+function fixOrderBeforeEncounter(record, listName, fixes) {
+  const orders = record[listName] ?? [];
+  const allOrders = [...(record.drugOrders ?? []), ...(record.testOrders ?? [])];
+  for (const order of orders) {
+    const encounter = record.encounters?.find(e => e.uuid === order.encounter?.uuid);
+    const start = toSecond(order.dateActivated);
+    const encounterTime = toSecond(encounter?.encounterDatetime);
+    if (!start || !encounterTime || !(start < encounterTime)) {
+      continue;
+    }
+    const laterThanNewStart = date => date && toSecond(date) < encounterTime;
+    if (laterThanNewStart(order.dateStopped) || laterThanNewStart(order.autoExpireDate)
+      || allOrders.some(o => o.previousOrder?.uuid === order.uuid && laterThanNewStart(o.dateActivated))) {
+      logger.warn(`Patient ${record.patient.uuid}: ${listName} ${order.uuid} starts before its encounter, but moving it would put it after its stop; left as it is`);
+      increment('HAI-1306 orders before their encounter left as they are');
+      continue;
+    }
+    fixes.push({ rule: 'orderBeforeEncounter', list: listName, uuid: order.uuid, field: 'dateActivated',
+      from: order.dateActivated, to: encounter.encounterDatetime });
+    order.dateActivated = encounter.encounterDatetime;
+    increment('HAI-1306 orders moved to their encounter time');
+  }
+}
+
 /** Call on a SOURCE export record, after its orders are sequenced. Changes the record in place. */
 export function applySourceDataFixes(record) {
   const fixes = [];
+  if (isOrderBeforeEncounterFixEnabled()) {
+    fixOrderBeforeEncounter(record, 'drugOrders', fixes);
+    fixOrderBeforeEncounter(record, 'testOrders', fixes);
+  }
   if (isSameSecondRenewalFixEnabled()) {
     fixSameSecondRenewals(record.drugOrders ?? [], 'drugOrders', fixes);
     fixSameSecondRenewals(record.testOrders ?? [], 'testOrders', fixes);

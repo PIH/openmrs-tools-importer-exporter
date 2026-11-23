@@ -40,6 +40,9 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
   accepted but today's core rejects, one rule at a time. Each change is listed in the patient file under
   `sourceDataFixesHAI1306` and in `LOG_HOME/source-data-fixes.csv` (rule, patient, order, field, old and new
   value); verification takes the changes into account. The code is in `src/services/sourceDataFixes.js`.
+  - *Orders before their encounter* (`FIX_ORDER_BEFORE_ENCOUNTER`, on by default; `false` turns it off): an order
+    activated before its encounter (the encounter was moved later to fit its visit, without its orders) is activated
+    at the encounter's time.
   - *Same-second renewals* (`FIX_SAME_SECOND_RENEWALS`, on by default; `false` turns it off): a RENEW order
     activated in the same second as the order it renews is moved one second later, and the previous order is
     stopped at its own activation time instead of one second before it.
