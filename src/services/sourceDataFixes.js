@@ -76,17 +76,18 @@
 //   concept with the location comment and a yyyy-mm-dd text; the text comes from REST's valueText, fetched for
 //   these obs only (fetchMisfiledReturnDates, called before the rules). The disposition construct's other wrong
 //   member in these encounters ("Transfer out location" = Discharged) is left as it is (see UHM-3407).
-//   formEditVoidedTwins (FIX_FORM_EDIT_VOIDED_TWINS): when a form with drug orders is saved again (edited),
-//   htmlformentry voids each of its orders ("Voided by htmlformentry") and creates an identical copy in the same
-//   second, but it doesn't move anything that points to the voided order over to the copy. About 980 HSN orders went
-//   through this; it only matters when something still points to the voided one: a dispense (19 in HSN, see
-//   UHM-9678) or another order's previousOrder (2 in HSN). Those voided orders are carried over (HAI-1305, and the
+//   formEditVoidedTwins (FIX_FORM_EDIT_VOIDED_TWINS): when an order is revised in its own encounter with the same
+//   start (Revise on an edited form), htmlformentry voids it ("Voided by htmlformentry") and creates a replacement
+//   with the same action and previous order in the same second (OrderSubmissionElement/FormEntrySession), possibly
+//   with changed dosing fields, but it doesn't move anything that points to the voided order over to the
+//   replacement. About 980 HSN orders went through this; it only matters when something still points to the voided
+//   one: a dispense (19 in HSN, see UHM-9678) or another order's previousOrder (2 in HSN). Those voided orders are carried over (HAI-1305, and the
 //   voided previous orders above) and posted on the target while their live copy is active, which fails with
 //   AmbiguousOrderException (2 HSN patients). Checked on HSN that these were form edits, not a cleanup script: voided
 //   by the user who created them, with the copy created in the same second in the same encounter. Fix: leave the
-//   voided order out and point its dispenses and the orders that refer to it to the live copy, which is what
-//   htmlformentry should have done. Only when the void reason is htmlformentry's and the copy is in the same
-//   encounter, has the same action, concept, drug, care setting, previous order and start, and was created within
+//   voided order out and point its dispenses and the orders that refer to it to the live replacement, which is
+//   what htmlformentry should have done. Only when the void reason is htmlformentry's and the replacement is in the
+//   same encounter, has the same action, concept, drug, care setting, previous order and start, and was created within
 //   2 seconds of the void (dateVoided and voidReason are fetched for the carried voided orders only, by
 //   fetchVoidInfo). Runs first, so the other rules see the repointed links.
 //
@@ -541,7 +542,7 @@ function fixZeroDoseMixtard(record, fixes) {
   }
 }
 
-/** Voided orders replaced by an identical copy when their form was edited (see the header). */
+/** Voided orders replaced by htmlformentry when revised in their own encounter (see the header). */
 function fixFormEditVoidedTwins(record, fixes) {
   const live = record.drugOrders ?? [];
   const same = (a, b, field) => (a[field]?.uuid ?? a[field] ?? null) === (b[field]?.uuid ?? b[field] ?? null);

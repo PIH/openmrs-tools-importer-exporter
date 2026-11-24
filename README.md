@@ -83,7 +83,7 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
     disposition construct's "Admission location in hospital" obs, which then can't be saved. That obs becomes a
     top-level "Return visit date" with the date (what the manual cleanups did); a disposition construct left with no
     members is left out.
-  - *Voided copies from form edits* (`FIX_FORM_EDIT_VOIDED_TWINS`, on by default; `false` turns it off): editing a
-    form makes htmlformentry void each drug order and create an identical copy, without moving dispenses or
-    renewals that point to the voided order. When such a voided order would be carried over (for a dispense or as a
-    previous order) it is left out instead, and what pointed to it points to its live copy.
+  - *Orders replaced by a revision in their own encounter* (`FIX_FORM_EDIT_VOIDED_TWINS`, on by default; `false` turns
+    it off): revising an order in its own encounter makes htmlformentry void it and create a replacement, without
+    moving dispenses or renewals that point to the voided order. When such a voided order would be carried over (for
+    a dispense or as a previous order) it is left out instead, and what pointed to it points to the replacement.
