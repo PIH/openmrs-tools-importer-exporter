@@ -71,8 +71,16 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
   - *Auto-expire one second before the start* (`FIX_AUTO_EXPIRE_BEFORE_START`, on by default; `false` turns it off): a
     drug order with a duration of 0 (core sets its auto-expire one second before its start) expires at its start.
   - *Overlapping drug orders for the same drug* (`FIX_OVERLAPPING_DRUG_ORDERS`, on by default; `false` turns it off):
-    when a drug order starts while an earlier order for the same drug is still active, the earlier one is stopped one
-    second before it. Left as it is (and logged) when another order stops the earlier one.
+    when a drug order starts while an earlier order for the same drug (same concept, drug and care setting, neither
+    replacing the other) is still active, the earlier one is stopped one second before it. When other orders refer to
+    the earlier one as their previous order:
+    - if they are all renewals (RENEW) that start after the later order has ended, the earlier order is **still
+      stopped** before the later one. Its renewal then follows a gap: for example, an order that ran from day 0 to
+      day 78 (when it was renewed), overlapped by another order from day 38 to day 73, now shows as stopped at day 38,
+      with the renewal at day 78. Core accepts a renewal of an order that has already stopped. These are counted
+      separately in the export summary ("...stopped before the next one (renewed later)") and logged with "(review)";
+    - otherwise (a revision or discontinuation refers to it, which core would try to stop again, or a renewal that
+      starts while the later order is still active, which would clash in its turn), it is left as it is and logged.
   - *Zero-dose Mixtard orders* (`FIX_ZERO_DOSE_MIXTARD`, on by default; `false` turns it off): HSN Mixtard 70/30
     insulin orders saved with a dose of 0 before core checked for it become free-text orders, with the dose cleared and
     instructions saying it wasn't recorded (no dose is made up). Only for that drug and only for orders that are voided

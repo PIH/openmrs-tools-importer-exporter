@@ -50,8 +50,14 @@
 //   care setting, neither replacing the other) where the later one starts while the earlier one is still active
 //   (AmbiguousOrderException: Order.cannot.have.more.than.one). Core only checks for this at save time against the
 //   orders active *now* for a same-day save, so an earlier order that had already ended by then wasn't seen. Fix:
-//   stop the earlier order one second before the later one starts. Skipped (and logged) when an order stops the
-//   earlier one, since that order would still overlap. Runs last, on the final start and stop dates.
+//   stop the earlier order one second before the later one starts. When other orders refer to the earlier one as
+//   their previous order: if they are all RENEWs that start after the later order has ended, the earlier order is
+//   still stopped (logged as its own count, "...stopped before the next one (renewed later)"). Core doesn't stop the
+//   previous order of a RENEW or check that it is still active, so the renewal imports; the earlier order then
+//   shows as stopped when the later one started, with its renewal after a gap (HSN: one patient, two drugs ordered
+//   together, earlier stop moved from day 78 to day 38; decided on HAI-1312). Any other order that refers to it
+//   (REVISE, DISCONTINUE: core would stop it again), or a RENEW that starts while the later order is still active
+//   (it would clash in turn): skipped and logged. Runs last, on the final start and stop dates.
 //   zeroDoseMixtard (FIX_ZERO_DOSE_MIXTARD): HSN Mixtard 70/30 insulin orders saved with a dose of 0
 //   (DrugOrder.error.doseZeroOrLess). They were entered on the Outpatient Followup (Adult) form between
 //   2026-03-13 and 2026-04-21, before HSN ran core 2.8.5 (TRUNK-6576), which added the dose > 0 check. The real dose
@@ -475,8 +481,12 @@ function fixOverlappingDrugOrders(record, fixes) {
   // Orders stopped by another order, including the voided orders carried over for HAI-1305/HAI-1306 (posted on the
   // target before being voided again, so they stop their previous order there as on the source)
   const voided = record[VOIDED_RECORDS_KEY] ?? {};
-  const stopped = new Set([...(record.drugOrders ?? []), ...(voided.drugOrders ?? []), ...(voided.voidedPreviousOrders ?? [])]
-    .map(o => o.previousOrder?.uuid).filter(Boolean));
+  const stoppers = new Map();   // order uuid -> the orders that refer to it as their previous order
+  for (const o of [...(record.drugOrders ?? []), ...(voided.drugOrders ?? []), ...(voided.voidedPreviousOrders ?? [])]) {
+    if (o.previousOrder?.uuid) {
+      stoppers.set(o.previousOrder.uuid, [...(stoppers.get(o.previousOrder.uuid) ?? []), o]);
+    }
+  }
   const linked = (a, b) => a.previousOrder?.uuid === b.uuid || b.previousOrder?.uuid === a.uuid;
   const sorted = [...orders].sort((a, b) => toSecond(a.dateActivated).localeCompare(toSecond(b.dateActivated)));
   for (const earlier of sorted) {
@@ -488,8 +498,13 @@ function fixOverlappingDrugOrders(record, fixes) {
     if (!later) {
       continue;
     }
-    if (stopped.has(earlier.uuid)) {
-      logger.warn(`Patient ${record.patient.uuid}: drug order ${earlier.uuid} overlaps ${later.uuid} for the same drug, but another order stops it; left as it is`);
+    const refs = stoppers.get(earlier.uuid) ?? [];
+    const laterEnd = endOf(later);
+    const renewedAfterLater = refs.length > 0 && refs.every(o => o.action === 'RENEW'
+      && laterEnd && toSecond(o.dateActivated) >= laterEnd);
+    if (refs.length > 0 && !renewedAfterLater) {
+      logger.warn(`Patient ${record.patient.uuid}: drug order ${earlier.uuid} overlaps ${later.uuid} for the same drug, but another order `
+        + `(${[...new Set(refs.map(o => o.action))].join(', ')}) refers to it; left as it is`);
       increment('HAI-1306 overlapping drug orders left as they are');
       continue;
     }
@@ -497,7 +512,13 @@ function fixOverlappingDrugOrders(record, fixes) {
     fixes.push({ rule: 'overlappingDrugOrders', list: 'drugOrders', uuid: earlier.uuid, field: 'dateStopped',
       from: earlier.dateStopped, to: newStop });
     earlier.dateStopped = newStop;
-    increment('HAI-1306 overlapping drug orders stopped before the next one');
+    if (renewedAfterLater) {
+      logger.warn(`Patient ${record.patient.uuid}: drug order ${earlier.uuid} overlaps ${later.uuid} for the same drug and is renewed `
+        + 'after it ends; stopped before the later one anyway (review)');
+      increment('HAI-1306 overlapping drug orders stopped before the next one (renewed later)');
+    } else {
+      increment('HAI-1306 overlapping drug orders stopped before the next one');
+    }
   }
 }
 
