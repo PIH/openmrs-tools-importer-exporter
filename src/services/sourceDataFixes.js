@@ -105,6 +105,20 @@
 //   configuration now uses). Also for the carried voided orders. The drug -> concept list is fetched from the
 //   source once per export (fetchForSourceDataFixes). HSN: 1 order (plus 2 voided ones not exported); SSPE and ZL
 //   Central: none.
+//   visitLocationOtherFacility (FIX_VISIT_LOCATION_OTHER_FACILITY): an encounter whose visit is at another facility
+//   (the visit's location is neither the encounter's location nor one of its ancestors). pihcore's
+//   PihEncounterValidator removes such a visit from the encounter on save (emrapi isSuitableVisit), so ZL Central
+//   imports the encounter without its visit, with no error. HSN has 4, all 2016 Mental Health Consults, each the only
+//   encounter in its visit: 3 encounters at Saint-Marc (SSPE) in visits at Saint-Marc (HSN), and 1 encounter at
+//   Saint-Marc (HSN) in a visit at Saint-Marc (SSPE). The evidence points to the source server's facility (HSN) in
+//   all 4: the same HSN mental health data-entry user created them (about 95% of that user's visits are at HSN), the
+//   patients' other visits are at HSN, and the 3 SSPE encounters were added 2 months after their HSN visit was
+//   created. Fix, only when the visit holds just this encounter: the side at the other facility is moved to the
+//   source server's facility (OPENMRS_SOURCE_FACILITY_UUID): an encounter outside the facility gets its visit's
+//   location (when that is the facility), or a visit at another facility gets the facility (when the encounter is
+//   within it). Anything else is logged and left as it is. Each change is also logged with "(review)", since the
+//   choice of side rests on these 4 cases. The location tree is fetched from the source once per export. SSPE: none.
+//   Decided on HAI-1312.
 //
 // On by default; set a rule's flag to false to turn it off. To remove: delete this file and its calls in
 // exporterService.js, exportPatients.js and verifyPatients.js.
@@ -229,6 +243,34 @@ async function loadDrugConcepts(server) {
 }
 const DRUG_CONCEPTS_KEY = 'drugConceptsHAI1306';   // temporary, removed by the rule
 
+export function isVisitLocationOtherFacilityFixEnabled() {
+  return config.FIX_VISIT_LOCATION_OTHER_FACILITY !== 'false' && !!config.OPENMRS_SOURCE_FACILITY_UUID;
+}
+
+// location uuid -> parent location uuid on the source, loaded once per export (including retired locations)
+let locationParents;
+async function loadLocationParents(server) {
+  if (!locationParents) {
+    locationParents = (async () => {
+      const map = new Map();
+      const pageSize = 500;
+      for (let start = 0; ; start += pageSize) {
+        const page = await fetchData(`${CONSTANTS.SOURCE.URLS.LOCATION}?includeAll=true&limit=${pageSize}&startIndex=${start}`
+          + '&v=custom:(uuid,parentLocation:(uuid))', server);
+        for (const location of page?.results ?? []) {
+          map.set(location.uuid, location.parentLocation?.uuid ?? null);
+        }
+        if (!page?.links?.some(link => link.rel === 'next')) {
+          break;
+        }
+      }
+      return map;
+    })();
+  }
+  return locationParents;
+}
+const LOCATION_PARENTS_KEY = 'locationParentsHAI1306';   // temporary, removed by the rule
+
 const HFE_VOID_REASON = 'Voided by htmlformentry';
 const VOID_INFO_KEY = 'voidInfoHAI1306';   // temporary, removed by the rule
 
@@ -240,6 +282,9 @@ const voidedOrderLists = record => {
 /** Call on a SOURCE export record before applySourceDataFixes: fetches what the rules need that the export leaves out. */
 export async function fetchForSourceDataFixes(record, server) {
   await fetchMisfiledReturnDates(record, server);
+  if (isVisitLocationOtherFacilityFixEnabled()) {
+    Object.defineProperty(record, LOCATION_PARENTS_KEY, { value: await loadLocationParents(server), configurable: true });   // not written to the file
+  }
   if (isDrugConceptChangedFixEnabled()) {
     Object.defineProperty(record, DRUG_CONCEPTS_KEY, { value: await loadDrugConcepts(server), configurable: true });   // not written to the file
   }
@@ -669,6 +714,50 @@ function fixDrugConceptChanged(record, fixes) {
   }
 }
 
+/** Encounters whose visit is at another facility (see the header). */
+function fixVisitLocationOtherFacility(record, fixes) {
+  const parents = record[LOCATION_PARENTS_KEY];
+  delete record[LOCATION_PARENTS_KEY];
+  const facility = config.OPENMRS_SOURCE_FACILITY_UUID;
+  if (!parents || !facility) {
+    return;
+  }
+  // true if ancestor is the location itself or one of its ancestors
+  const within = (location, ancestor) => {
+    for (let l = location, depth = 0; l && depth < 20; l = parents.get(l), depth++) {
+      if (l === ancestor) {
+        return true;
+      }
+    }
+    return false;
+  };
+  const encounters = record.encounters ?? [];
+  for (const encounter of encounters) {
+    const visit = (record.visits ?? []).find(v => v.uuid === encounter.visit?.uuid);
+    const encounterLocation = encounter.location?.uuid;
+    const visitLocation = visit?.location?.uuid;
+    if (!visit || !encounterLocation || !visitLocation || within(encounterLocation, visitLocation)) {
+      continue;
+    }
+    const onlyEncounter = encounters.filter(e => e.visit?.uuid === visit.uuid).length === 1;
+    const log = (list, uuid, field, from, to) => fixes.push({ rule: 'visitLocationOtherFacility', list, uuid, field, from, to });
+    if (onlyEncounter && visitLocation === facility && !within(encounterLocation, facility)) {
+      log('encounters', encounter.uuid, 'location', encounterLocation, visitLocation);
+      encounter.location = { ...encounter.location, uuid: visitLocation };
+      logger.warn(`Patient ${record.patient.uuid}: encounter ${encounter.uuid} was at another facility than its visit ${visit.uuid}; moved to the visit's location, the source facility (review)`);
+      increment('HAI-1306 encounters at another facility than their visit moved to the visit\'s location');
+    } else if (onlyEncounter && within(encounterLocation, facility) && visitLocation !== facility) {
+      log('visits', visit.uuid, 'location', visitLocation, facility);
+      visit.location = { ...visit.location, uuid: facility };
+      logger.warn(`Patient ${record.patient.uuid}: visit ${visit.uuid} was at another facility than its encounter ${encounter.uuid}; moved to the source facility (review)`);
+      increment('HAI-1306 visits at another facility than their encounter moved to the source facility');
+    } else {
+      logger.warn(`Patient ${record.patient.uuid}: encounter ${encounter.uuid} doesn't fit the location of its visit ${visit.uuid}; left as it is (review)`);
+      increment('HAI-1306 encounters not at their visit\'s location left as they are');
+    }
+  }
+}
+
 /** Admission location obs holding a return visit date (UHM-3407, see the header). */
 function fixReturnDateInAdmissionLocation(record, fixes) {
   for (const encounter of record.encounters ?? []) {
@@ -709,6 +798,9 @@ export function applySourceDataFixes(record) {
   const fixes = [];
   if (isFormEditVoidedTwinsFixEnabled()) {
     fixFormEditVoidedTwins(record, fixes);
+  }
+  if (isVisitLocationOtherFacilityFixEnabled()) {
+    fixVisitLocationOtherFacility(record, fixes);
   }
   if (isDrugConceptChangedFixEnabled()) {
     fixDrugConceptChanged(record, fixes);   // before the rules that compare orders for the same concept

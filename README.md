@@ -99,6 +99,16 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
     a drug order whose concept isn't its drug's current concept (the drug was re-mapped in the configuration later,
     e.g. UHM-9103) gets its drug's concept, since core rejects the mismatch on save. The drug list is read from the
     source once per export.
+  - *Encounter and visit at different facilities* (`FIX_VISIT_LOCATION_OTHER_FACILITY`, on by default when
+    `OPENMRS_SOURCE_FACILITY_UUID` is set; `false` turns it off): an encounter whose visit's location is neither the
+    encounter's location nor one of its ancestors. pihcore's encounter validator removes such a visit on save, so the
+    target would import the encounter without its visit (no error). Only when the visit holds just this encounter,
+    the side at the other facility is moved to the source server's facility (`OPENMRS_SOURCE_FACILITY_UUID`):
+    - an encounter outside the facility, in a visit at the facility, gets the visit's location;
+    - a visit at another facility, holding an encounter within the facility, gets the facility as its location.
+
+    Otherwise it is left as it is. Every case is logged with "(review)". HSN had 4 (2016 Mental Health Consults at
+    Saint-Marc HSN / SSPE); the evidence pointed to HSN in all 4 (HAI-1312).
   - *Verification: text encoded twice* (always on; UHM-9691): free text has been stored HTML-encoded since mid-2025,
     and a note saved again gets encoded twice (`&lt;` becomes `&amp;lt;`). The target stores such a value with one
     level of encoding removed. Verification treats the two as equal only when the target's text is exactly the
