@@ -114,6 +114,10 @@ async function verifyPatients() {
           sourceDataFixes.normalizeForVerification(patientRecord, parsedFileContents);
           sourceDataFixes.normalizeEncodedTextForVerification(patientRecord, parsedFileContents, uuid);   // UHM-9691
 
+          // The order of an encounter's providers isn't meaningful and REST doesn't return them in a fixed order
+          sortEncounterProviders(patientRecord);
+          sortEncounterProviders(parsedFileContents);
+
           // Sanitize both objects (remove whitespace and normalize structure)
           const sanitizedPatientRecord = sanitizeObject(patientRecord);
           const sanitizedFileContents = sanitizeObject(parsedFileContents);
@@ -173,6 +177,17 @@ async function verifyPatients() {
   }
   catch (err) {
     throw new Error('Failed to re-set global properties for max results: ' + err.message);
+  }
+}
+
+/** Sorts each encounter's providers (by provider, role and date created), in place, so their order isn't compared. */
+function sortEncounterProviders(record) {
+  const key = ep => [ep.provider?.uuid, ep.encounterRole?.uuid, ep.dateCreated].join('|');
+  const encounters = [...(record?.encounters ?? []), ...(record?.[voidedDispenseOrders.VOIDED_RECORDS_KEY]?.encounters ?? [])];
+  for (const encounter of encounters) {
+    if (Array.isArray(encounter.encounterProviders)) {
+      encounter.encounterProviders.sort((a, b) => key(a).localeCompare(key(b)));
+    }
   }
 }
 
