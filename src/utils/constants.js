@@ -28,6 +28,7 @@ export default {
       ENCOUNTER: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/encounter`,
       OBS: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/obs`,
       ORDER: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/order`,
+      DRUG: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/drug`,
       MEDICATION_DISPENSE: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/medicationdispense`,
       USER: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/user`,
       PROVIDER: `${config.OPENMRS_SOURCE_CONTEXT_PATH}/ws/rest/v1/provider`,

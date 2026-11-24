@@ -96,6 +96,15 @@
 //   same encounter, has the same action, concept, drug, care setting, previous order and start, and was created within
 //   2 seconds of the void (dateVoided and voidReason are fetched for the carried voided orders only, by
 //   fetchVoidInfo). Runs first, so the other rules see the repointed links.
+//   drugConceptChanged (FIX_DRUG_CONCEPT_CHANGED): a drug order whose concept isn't its drug's concept
+//   (DrugOrderValidator: drug error.general, concept error.concept). A drug's concept can be changed in the
+//   configuration after it was ordered, and existing orders aren't updated: UHM-9103 (config-zl f5e7c62,
+//   2026-02-09) moved 20 drugs, e.g. "Sodium chloride, 0.9% Intravenous infusion, 1000mL bottle" from CIEL:84047
+//   (Sodium chloride) to CIEL:80804 (Sodium Chloride 0.9%), and HSN ordered it before it picked that up. Core only
+//   checks this when an order is saved. Fix: give the order its drug's concept (the same drug, under the concept the
+//   configuration now uses). Also for the carried voided orders. The drug -> concept list is fetched from the
+//   source once per export (fetchForSourceDataFixes). HSN: 1 order (plus 2 voided ones not exported); SSPE and ZL
+//   Central: none.
 //
 // On by default; set a rule's flag to false to turn it off. To remove: delete this file and its calls in
 // exporterService.js, exportPatients.js and verifyPatients.js.
@@ -192,6 +201,34 @@ export function isFormEditVoidedTwinsFixEnabled() {
   return config.FIX_FORM_EDIT_VOIDED_TWINS !== 'false';
 }
 
+export function isDrugConceptChangedFixEnabled() {
+  return config.FIX_DRUG_CONCEPT_CHANGED !== 'false';
+}
+
+// drug uuid -> concept uuid on the source, loaded once per export (including retired drugs)
+let drugConcepts;
+async function loadDrugConcepts(server) {
+  if (!drugConcepts) {
+    drugConcepts = (async () => {
+      const map = new Map();
+      const pageSize = 500;
+      for (let start = 0; ; start += pageSize) {
+        const page = await fetchData(`${CONSTANTS.SOURCE.URLS.DRUG}?includeAll=true&limit=${pageSize}&startIndex=${start}`
+          + '&v=custom:(uuid,concept:(uuid))', server);
+        for (const drug of page?.results ?? []) {
+          map.set(drug.uuid, drug.concept?.uuid);
+        }
+        if (!page?.links?.some(link => link.rel === 'next')) {
+          break;
+        }
+      }
+      return map;
+    })();
+  }
+  return drugConcepts;
+}
+const DRUG_CONCEPTS_KEY = 'drugConceptsHAI1306';   // temporary, removed by the rule
+
 const HFE_VOID_REASON = 'Voided by htmlformentry';
 const VOID_INFO_KEY = 'voidInfoHAI1306';   // temporary, removed by the rule
 
@@ -203,6 +240,9 @@ const voidedOrderLists = record => {
 /** Call on a SOURCE export record before applySourceDataFixes: fetches what the rules need that the export leaves out. */
 export async function fetchForSourceDataFixes(record, server) {
   await fetchMisfiledReturnDates(record, server);
+  if (isDrugConceptChangedFixEnabled()) {
+    Object.defineProperty(record, DRUG_CONCEPTS_KEY, { value: await loadDrugConcepts(server), configurable: true });   // not written to the file
+  }
   if (isFormEditVoidedTwinsFixEnabled()) {
     for (const [, holder, key] of voidedOrderLists(record)) {
       for (const order of holder[key] ?? []) {
@@ -608,6 +648,27 @@ function fixFormEditVoidedTwins(record, fixes) {
   }
 }
 
+/** Drug orders whose concept isn't their drug's concept (see the header). */
+function fixDrugConceptChanged(record, fixes) {
+  const concepts = record[DRUG_CONCEPTS_KEY];
+  delete record[DRUG_CONCEPTS_KEY];
+  if (!concepts) {
+    return;
+  }
+  const lists = [['drugOrders', record.drugOrders ?? []], ...voidedOrderLists(record).map(([n, h, k]) => [n, h[k] ?? []])];
+  for (const [listName, orders] of lists) {
+    for (const order of orders) {
+      const drugConcept = concepts.get(order.drug?.uuid);
+      if (!drugConcept || !order.concept?.uuid || order.concept.uuid === drugConcept) {
+        continue;
+      }
+      fixes.push({ rule: 'drugConceptChanged', list: listName, uuid: order.uuid, field: 'concept', from: order.concept.uuid, to: drugConcept });
+      order.concept = { ...order.concept, uuid: drugConcept };
+      increment('HAI-1306 drug orders given their drug\'s current concept');
+    }
+  }
+}
+
 /** Admission location obs holding a return visit date (UHM-3407, see the header). */
 function fixReturnDateInAdmissionLocation(record, fixes) {
   for (const encounter of record.encounters ?? []) {
@@ -648,6 +709,9 @@ export function applySourceDataFixes(record) {
   const fixes = [];
   if (isFormEditVoidedTwinsFixEnabled()) {
     fixFormEditVoidedTwins(record, fixes);
+  }
+  if (isDrugConceptChangedFixEnabled()) {
+    fixDrugConceptChanged(record, fixes);   // before the rules that compare orders for the same concept
   }
   if (isVisitStopForEncountersFixEnabled()) {
     fixVisitStopForEncounters(record, fixes);

@@ -95,3 +95,7 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
     it off): revising an order in its own encounter makes htmlformentry void it and create a replacement, without
     moving dispenses or renewals that point to the voided order. When such a voided order would be carried over (for
     a dispense or as a previous order) it is left out instead, and what pointed to it points to the replacement.
+  - *Drug's concept changed after it was ordered* (`FIX_DRUG_CONCEPT_CHANGED`, on by default; `false` turns it off):
+    a drug order whose concept isn't its drug's current concept (the drug was re-mapped in the configuration later,
+    e.g. UHM-9103) gets its drug's concept, since core rejects the mismatch on save. The drug list is read from the
+    source once per export.
