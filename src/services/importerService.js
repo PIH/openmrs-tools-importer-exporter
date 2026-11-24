@@ -1,7 +1,8 @@
 import {postDataIfNotExists} from "./openmrsService.js";
 import * as voidedDispenseOrders from "./voidedDispenseOrders.js";
 import * as visitsBeforeBirthdate from "./visitsBeforeBirthdate.js";
-import logger, {invalidIdentifierLogger} from "../utils/logger.js";
+import logger from "../utils/logger.js";
+import { appendCsvRows } from "../utils/csvLog.js";
 import CONSTANTS from "../utils/constants.js";
 import {generateStrongPassword} from "../utils/utils.js";
 import config from "../utils/config.js";
@@ -40,25 +41,38 @@ function extractInvalidIdentifier(err) {
   return null;
 }
 
+// Identifiers the import had to change, one row each, for the site team to clean up: LOG_HOME/invalid-identifiers.csv
+const IDENTIFIER_LOG_FILE = 'invalid-identifiers.csv';
+const IDENTIFIER_LOG_HEADER = ['change', 'patient', 'zlEmrId', 'dossierNumber', 'identifierType', 'identifier',
+  'newIdentifierType', 'newIdentifier'];
+
+function identifierOfType(patient, typeUuid) {
+  return patient.identifiers?.find((i) => i.identifierType?.uuid === typeUuid)?.identifier ?? '';
+}
+
+function identifierTypeName(identifierType) {
+  return identifierType?.display ?? identifierType?.uuid ?? '';
+}
+
+// Call before the identifier is changed, so the ZL EMR ID and dossier number columns show the values as exported
+function logIdentifierChange(change, patient, identifierEntry, newIdentifierType, newIdentifier) {
+  const row = [change, patient.uuid,
+    identifierOfType(patient, config.EMR_PATIENT_IDENTIFIER_TYPE_UUID),
+    identifierOfType(patient, config.DOSSIER_NUMBER_IDENTIFIER_TYPE_UUID),
+    identifierTypeName(identifierEntry.identifierType), identifierEntry.identifier, newIdentifierType, newIdentifier];
+  logger.warn(`Patient ${patient.uuid}: ${change} ${identifierEntry.identifier} (${identifierTypeName(identifierEntry.identifierType)})` +
+    ` changed to ${newIdentifier} (${newIdentifierType}), listed in ${IDENTIFIER_LOG_FILE}`);
+  return appendCsvRows(IDENTIFIER_LOG_FILE, IDENTIFIER_LOG_HEADER, [row]);
+}
+
 function logDuplicateIdentifier(patient, identifierEntry) {
-  const zlEmrIdEntry = patient.identifiers?.find(
-    (i) => i.identifierType?.uuid === config.EMR_PATIENT_IDENTIFIER_TYPE_UUID
-  );
-  const zlEmrId = zlEmrIdEntry?.identifier ?? patient.uuid;
-  const identifierType = identifierEntry.identifierType?.display ?? identifierEntry.identifierType?.uuid;
-  const message = `Patient ${zlEmrId} has duplicate identifier ${identifierEntry.identifier} of type ${identifierType}. Converting to DPL-${identifierEntry.identifier} and importing`;
-  invalidIdentifierLogger.info(message);
-  logger.warn(message);
+  return logIdentifierChange('duplicateIdentifier', patient, identifierEntry,
+    identifierTypeName(identifierEntry.identifierType), `DPL-${identifierEntry.identifier}`);
 }
 
 function logInvalidIdentifier(patient, identifierEntry) {
-  const dossierEntry = patient.identifiers?.find(
-    (i) => i.identifierType?.uuid === config.DOSSIER_NUMBER_IDENTIFIER_TYPE_UUID
-  );
-  const dossierNumber = dossierEntry?.identifier ?? patient.uuid;
-  const message = `Invalid ZL EMR ID ${identifierEntry.identifier} for patient with dossier number ${dossierNumber}. Invalid identifier moved to invalid identifier type`;
-  invalidIdentifierLogger.info(message);
-  logger.warn(message);
+  return logIdentifierChange('invalidZlEmrId', patient, identifierEntry,
+    `invalid identifier type (${config.INVALID_IDENTIFIER_TYPE_UUID})`, identifierEntry.identifier);
 }
 
 export async function importUser(user) {
@@ -170,7 +184,7 @@ export async function importPatient(record) {
       const duplicateIdentifierEntry = duplicateIdentifier && patient.identifiers?.find((i) => i.identifier === duplicateIdentifier);
       if (duplicateIdentifierEntry) {
         retriedDuplicateIdentifier = true;
-        logDuplicateIdentifier(patient, duplicateIdentifierEntry);
+        await logDuplicateIdentifier(patient, duplicateIdentifierEntry);
         duplicateIdentifierEntry.identifier = `DPL-${duplicateIdentifierEntry.identifier}`;
         continue;
       }
@@ -183,7 +197,7 @@ export async function importPatient(record) {
       );
       if (invalidIdentifierEntry) {
         retriedInvalidIdentifier = true;
-        logInvalidIdentifier(patient, invalidIdentifierEntry);
+        await logInvalidIdentifier(patient, invalidIdentifierEntry);
         invalidIdentifierEntry.identifierType = { uuid: config.INVALID_IDENTIFIER_TYPE_UUID };
         continue;
       }

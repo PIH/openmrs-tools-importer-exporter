@@ -16,10 +16,9 @@
 //
 // On by default; IMPORT_VISITS_BEFORE_BIRTHDATE=false turns it off. To remove: delete this file and its calls in
 // importerService.js.
-import fs from "fs/promises";
-import path from "path";
 import CONSTANTS from "../utils/constants.js";
 import config from "../utils/config.js";
+import { appendCsvRows } from "../utils/csvLog.js";
 import logger from "../utils/logger.js";
 import { increment } from "../utils/metrics.js";
 import { postData } from "./openmrsService.js";
@@ -79,15 +78,7 @@ export async function restoreBirthdate(record) {
   await postData(`${CONSTANTS.TARGET.URLS.PERSON}/${record.patient.uuid}`,
     { birthdate: person.birthdate, birthdateEstimated: !!person.birthdateEstimated });
   increment('patients imported with visits before their birthdate (HAI-1311)');
-  const file = path.join(config.LOG_HOME, LOG_FILE);
-  await fs.mkdir(config.LOG_HOME, { recursive: true });
-  let header = '';
-  try {
-    await fs.access(file);
-  } catch {
-    header = 'patient,visitsBeforeBirthdate\n';
-  }
-  await fs.appendFile(file, `${header}${record.patient.uuid},${visits.length}\n`);
+  await appendCsvRows(LOG_FILE, ['patient', 'visitsBeforeBirthdate'], [[record.patient.uuid, visits.length]]);
 }
 
 let normalized = 0;
