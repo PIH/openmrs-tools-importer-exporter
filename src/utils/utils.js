@@ -118,11 +118,6 @@ export function sanitizeObject(obj)  {
     return Object.entries(obj).reduce((acc, [key, value]) => {
       if (value !== undefined) { // drop any undefined properties
 
-        // hack: remove seconds and milliseconds component of date created to ignore issue where the patient date created is a second different from what was expected
-        if (key === "dateCreated") {
-          value = value.replace(/\d{2}\.\d{3}/g, '');
-        }
-
         // Recursively sanitize each field in the object, dropping null (and so blank) values: the target leaves
         // null properties out of its REST responses, so null, blank and missing all mean the same thing
         const sanitized = sanitizeObject(value);
@@ -146,6 +141,55 @@ export function sanitizeObject(obj)  {
       .replace(/>/g,"&gt;");
   }
   return obj; // Return non-object, non-string values as-is
+}
+
+// Audit dates (dateCreated, dateChanged) the target can store a second off from the source: the patient's dates
+// come back one second earlier or later (HAI-1312). This replaces an earlier workaround that dropped the seconds of
+// every dateCreated, which ignored up to 59 seconds and still failed when the second crossed a minute.
+const AUDIT_DATE_FIELDS = new Set(['dateCreated', 'dateChanged']);
+const AUDIT_DATE_TOLERANCE_MS = 1000;
+let auditDatesWithinTolerance = 0;
+
+/** How many audit dates normalizeAuditDatesForVerification has treated as equal so far. */
+export function auditDatesWithinToleranceCount() {
+  return auditDatesWithinTolerance;
+}
+
+/**
+ * Call on the target record and the file contents before verification compares them. Where a dateCreated or
+ * dateChanged (at the same place in both records) differs from the file's by at most a second, the file's value is
+ * put on the target record.
+ */
+export function normalizeAuditDatesForVerification(targetRecord, fileRecord) {
+  // Keyed by path, with array elements identified by their uuid (or position), so a patient and its person (which
+  // share a uuid) are told apart
+  const collect = (obj, path, out) => {
+    if (Array.isArray(obj)) {
+      obj.forEach((item, i) => collect(item, `${path}[${item?.uuid ?? i}]`, out));
+    } else if (obj && typeof obj === 'object') {
+      for (const [key, value] of Object.entries(obj)) {
+        if (AUDIT_DATE_FIELDS.has(key) && typeof value === 'string') {
+          out.set(`${path}/${key}`, { obj, key });
+        } else if (value && typeof value === 'object') {
+          collect(value, `${path}/${key}`, out);
+        }
+      }
+    }
+  };
+  const fileDates = new Map();
+  const targetDates = new Map();
+  collect(fileRecord, '', fileDates);
+  collect(targetRecord, '', targetDates);
+  for (const [id, target] of targetDates) {
+    const file = fileDates.get(id);
+    const t = Date.parse(target.obj[target.key]);
+    const f = file && Date.parse(file.obj[file.key]);
+    if (file && target.obj[target.key] !== file.obj[file.key] && !Number.isNaN(t) && !Number.isNaN(f)
+      && Math.abs(t - f) <= AUDIT_DATE_TOLERANCE_MS) {
+      target.obj[target.key] = file.obj[file.key];
+      auditDatesWithinTolerance++;
+    }
+  }
 }
 
 /**

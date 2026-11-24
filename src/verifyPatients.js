@@ -6,11 +6,12 @@ import logger from './utils/logger.js';
 import config from './utils/config.js';
 import _ from "lodash"; // Import Lodash for deep object comparison
 import { diffString } from "json-diff";
-import {replaceMappings,sanitizeObject,convertHaiti2016TimesToDaylightSavings} from "./utils/utils.js";
+import {replaceMappings,sanitizeObject,convertHaiti2016TimesToDaylightSavings,normalizeAuditDatesForVerification,auditDatesWithinToleranceCount} from "./utils/utils.js";
 import {getGlobalProperty, setGlobalProperty} from "./services/openmrsService.js";
 import Constants from "./utils/constants.js";
 import * as voidedDispenseOrders from "./services/voidedDispenseOrders.js";
 import * as sourceDataFixes from "./services/sourceDataFixes.js";
+import * as visitsBeforeBirthdate from "./services/visitsBeforeBirthdate.js";
 
 const USER_MAPPINGS_FILE_PATH = config.EXPORT_USER_MAPPINGS_FILE ? path.join(config.EXPORT_USER_MAPPINGS_FILE) : undefined;
 const userMappings = USER_MAPPINGS_FILE_PATH ? loadMappingFile(USER_MAPPINGS_FILE_PATH) : [];
@@ -113,10 +114,14 @@ async function verifyPatients() {
           // TEMPORARY (HAI-1306)
           sourceDataFixes.normalizeForVerification(patientRecord, parsedFileContents);
           sourceDataFixes.normalizeEncodedTextForVerification(patientRecord, parsedFileContents, uuid);   // UHM-9691
+          visitsBeforeBirthdate.normalizeForVerification(patientRecord, parsedFileContents);   // TEMPORARY (HAI-1311)
 
           // The order of an encounter's providers isn't meaningful and REST doesn't return them in a fixed order
           sortEncounterProviders(patientRecord);
           sortEncounterProviders(parsedFileContents);
+
+          // Audit dates the target stores a second off (see utils.js); after sorting, so providers line up
+          normalizeAuditDatesForVerification(patientRecord, parsedFileContents);
 
           // Sanitize both objects (remove whitespace and normalize structure)
           const sanitizedPatientRecord = sanitizeObject(patientRecord);
@@ -157,6 +162,8 @@ async function verifyPatients() {
 
     // All batches completed
     logger.info('🎉 All patients processed for verification.');
+    logger.info(`Patients imported with visits before their birthdate, audit fields of the patient not compared (HAI-1311): ${visitsBeforeBirthdate.normalizedCount()}`);
+    logger.info(`dateCreated/dateChanged within a second of the source, treated as equal: ${auditDatesWithinToleranceCount()}`);
     logger.info(`Obs text with one level of HTML encoding removed on the target, treated as equal (UHM-9691): ${sourceDataFixes.encodedTextNormalizedCount()}`);
   } catch (error) {
     // Catch unexpected errors
@@ -180,7 +187,10 @@ async function verifyPatients() {
   }
 }
 
-/** Sorts each encounter's providers (by provider, role and date created), in place, so their order isn't compared. */
+/**
+ * Sorts each encounter's providers (by provider and role, then date created), in place, so their order isn't compared.
+ * Runs before the audit dates are compared, so a date created a second off doesn't change the order.
+ */
 function sortEncounterProviders(record) {
   const key = ep => [ep.provider?.uuid, ep.encounterRole?.uuid, ep.dateCreated].join('|');
   const encounters = [...(record?.encounters ?? []), ...(record?.[voidedDispenseOrders.VOIDED_RECORDS_KEY]?.encounters ?? [])];
