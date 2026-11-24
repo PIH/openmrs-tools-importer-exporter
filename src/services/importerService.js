@@ -1,5 +1,6 @@
 import {postDataIfNotExists} from "./openmrsService.js";
 import * as voidedDispenseOrders from "./voidedDispenseOrders.js";
+import * as visitsBeforeBirthdate from "./visitsBeforeBirthdate.js";
 import logger, {invalidIdentifierLogger} from "../utils/logger.js";
 import CONSTANTS from "../utils/constants.js";
 import {generateStrongPassword} from "../utils/utils.js";
@@ -197,6 +198,9 @@ export async function importPatient(record) {
   // If the patient already existed (a resumed run or a retry), check each one as before.
   const childOptions = { skipExistenceCheck: patientResult === 'created' };
 
+  // TEMPORARY (HAI-1311): a birthdate after the patient's first visit would make its visits fail
+  await visitsBeforeBirthdate.setTemporaryBirthdate(record);
+
   for (const visit of record.visits) {
     try {
       await postDataIfNotExists(CONSTANTS.TARGET.URLS.VISIT, visit, visit.uuid, childOptions);
@@ -309,6 +313,9 @@ export async function importPatient(record) {
       throw err;
     }
   }
+
+  // TEMPORARY (HAI-1311)
+  await visitsBeforeBirthdate.restoreBirthdate(record);
 }
 
 // Logs the reason OpenMRS gave for rejecting a request: the message and Java detail, and for validation

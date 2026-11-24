@@ -42,6 +42,16 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
   the order that refers to it, so that order stops it as on the source, and voids it again afterwards with the reason
   "copied from source server due to HAI-1306". On by default; set `INCLUDE_VOIDED_PREVIOUS_ORDERS=false` to turn it
   off. Same module as above.
+- **Visits that start before the patient's birthdate (HAI-1311).** Core rejects a visit that starts before the
+  patient's birthdate, so these patients failed to import (9 SSPE, 12 HSN; HAI-1311 lists them for the sites to
+  correct). Only the visit is checked against the birthdate, not a later change of the birthdate, so the import sets
+  such a patient's birthdate to the day of their earliest visit, imports everything, then puts the source's birthdate
+  (and whether it is estimated) back. The patient arrives as on the source, still with visits before the birthdate,
+  and editing one of those visits in ZL Central will fail until the data is corrected. Each patient is counted in the
+  import summary and listed in `LOG_HOME/visits-before-birthdate.csv`. Verification doesn't compare the patient's
+  `dateChanged`/`changedBy` for these patients, since the birthdate updates set them and REST can't set them back.
+  On by default; `IMPORT_VISITS_BEFORE_BIRTHDATE=false` turns it off. The code is in
+  `src/services/visitsBeforeBirthdate.js`.
 - **Source data the target's validation rejects (HAI-1306).** The export corrects a few patterns that SSPE and HSN
   accepted but today's core rejects, one rule at a time. Each change is listed in the patient file under
   `sourceDataFixesHAI1306` and in `LOG_HOME/source-data-fixes.csv` (rule, patient, order, field, old and new
