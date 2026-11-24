@@ -524,7 +524,7 @@ function fixReturnDateInAdmissionLocation(record, fixes) {
         log(member.uuid, 'comment', LOCATION_COMMENT, null);
         log(member.uuid, 'obsGroup', group.uuid, null);
         group.groupMembers = group.groupMembers.filter(o => o !== member);
-        const moved = { ...member, concept: { uuid: RETURN_VISIT_DATE_CONCEPT_UUID }, value: text, groupMembers: [] };
+        const moved = { ...member, concept: { ...member.concept, uuid: RETURN_VISIT_DATE_CONCEPT_UUID }, value: text, groupMembers: [] };
         delete moved.comment;
         encounter.obs.push(moved);
         increment('HAI-1306 admission location dates moved to a return visit date');
