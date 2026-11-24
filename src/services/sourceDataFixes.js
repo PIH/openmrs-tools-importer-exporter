@@ -76,6 +76,19 @@
 //   concept with the location comment and a yyyy-mm-dd text; the text comes from REST's valueText, fetched for
 //   these obs only (fetchMisfiledReturnDates, called before the rules). The disposition construct's other wrong
 //   member in these encounters ("Transfer out location" = Discharged) is left as it is (see UHM-3407).
+//   formEditVoidedTwins (FIX_FORM_EDIT_VOIDED_TWINS): when a form with drug orders is saved again (edited),
+//   htmlformentry voids each of its orders ("Voided by htmlformentry") and creates an identical copy in the same
+//   second, but it doesn't move anything that points to the voided order over to the copy. About 980 HSN orders went
+//   through this; it only matters when something still points to the voided one: a dispense (19 in HSN, see
+//   UHM-9678) or another order's previousOrder (2 in HSN). Those voided orders are carried over (HAI-1305, and the
+//   voided previous orders above) and posted on the target while their live copy is active, which fails with
+//   AmbiguousOrderException (2 HSN patients). Checked on HSN that these were form edits, not a cleanup script: voided
+//   by the user who created them, with the copy created in the same second in the same encounter. Fix: leave the
+//   voided order out and point its dispenses and the orders that refer to it to the live copy, which is what
+//   htmlformentry should have done. Only when the void reason is htmlformentry's and the copy is in the same
+//   encounter, has the same action, concept, drug, care setting, previous order and start, and was created within
+//   2 seconds of the void (dateVoided and voidReason are fetched for the carried voided orders only, by
+//   fetchVoidInfo). Runs first, so the other rules see the repointed links.
 //
 // On by default; set a rule's flag to false to turn it off. To remove: delete this file and its calls in
 // exporterService.js, exportPatients.js and verifyPatients.js.
@@ -163,6 +176,31 @@ export async function fetchMisfiledReturnDates(record, server) {
           const obs = await fetchData(`${CONSTANTS.SOURCE.URLS.OBS}/${member.uuid}?v=custom:(uuid,valueText)`, server);
           member[MISFILED_TEXT_KEY] = obs?.valueText ?? null;
         }
+      }
+    }
+  }
+}
+
+export function isFormEditVoidedTwinsFixEnabled() {
+  return config.FIX_FORM_EDIT_VOIDED_TWINS !== 'false';
+}
+
+const HFE_VOID_REASON = 'Voided by htmlformentry';
+const VOID_INFO_KEY = 'voidInfoHAI1306';   // temporary, removed by the rule
+
+const voidedOrderLists = record => {
+  const voided = record[VOIDED_RECORDS_KEY] ?? {};
+  return [['voidedDrugOrders', voided, 'drugOrders'], ['voidedPreviousOrders', voided, 'voidedPreviousOrders']];
+};
+
+/** Call on a SOURCE export record before applySourceDataFixes: fetches what the rules need that the export leaves out. */
+export async function fetchForSourceDataFixes(record, server) {
+  await fetchMisfiledReturnDates(record, server);
+  if (isFormEditVoidedTwinsFixEnabled()) {
+    for (const [, holder, key] of voidedOrderLists(record)) {
+      for (const order of holder[key] ?? []) {
+        const audit = await fetchData(`${CONSTANTS.SOURCE.URLS.ORDER}/${order.uuid}?v=custom:(uuid,auditInfo)`, server);
+        order[VOID_INFO_KEY] = { dateVoided: audit?.auditInfo?.dateVoided ?? null, voidReason: audit?.auditInfo?.voidReason ?? null };
       }
     }
   }
@@ -503,6 +541,51 @@ function fixZeroDoseMixtard(record, fixes) {
   }
 }
 
+/** Voided orders replaced by an identical copy when their form was edited (see the header). */
+function fixFormEditVoidedTwins(record, fixes) {
+  const live = record.drugOrders ?? [];
+  const same = (a, b, field) => (a[field]?.uuid ?? a[field] ?? null) === (b[field]?.uuid ?? b[field] ?? null);
+  for (const [listName, holder, key] of voidedOrderLists(record)) {
+    for (const voided of [...(holder[key] ?? [])]) {
+      const info = voided[VOID_INFO_KEY];
+      delete voided[VOID_INFO_KEY];
+      if (info?.voidReason !== HFE_VOID_REASON || !info.dateVoided) {
+        continue;
+      }
+      const twin = live.find(o => ['encounter', 'concept', 'drug', 'drugNonCoded', 'careSetting', 'previousOrder', 'action']
+          .every(field => same(o, voided, field))
+        && toSecond(o.dateActivated) === toSecond(voided.dateActivated)
+        && o.dateCreated && Math.abs(Date.parse(o.dateCreated) - Date.parse(info.dateVoided)) <= 2000);
+      if (!twin) {
+        continue;
+      }
+      const log = (list, uuid, field, from, to) => fixes.push({ rule: 'formEditVoidedTwins', list, uuid, field, from, to });
+      for (const dispense of record.medicationDispenses ?? []) {
+        if (dispense.drugOrder?.uuid === voided.uuid) {
+          log('medicationDispenses', dispense.uuid, 'drugOrder', voided.uuid, twin.uuid);
+          dispense.drugOrder = { ...dispense.drugOrder, uuid: twin.uuid };
+        }
+      }
+      for (const [otherList, orders] of [['drugOrders', live], ...voidedOrderLists(record).map(([n, h, k]) => [n, h[k] ?? []])]) {
+        for (const order of orders) {
+          if (order.previousOrder?.uuid === voided.uuid) {
+            log(otherList, order.uuid, 'previousOrder', voided.uuid, twin.uuid);
+            order.previousOrder = { ...order.previousOrder, uuid: twin.uuid };
+          }
+        }
+      }
+      log(listName, voided.uuid, 'order', 'voided copy', 'left out');
+      holder[key] = holder[key].filter(o => o !== voided);
+      increment('HAI-1306 voided form-edit copies replaced by their live order');
+    }
+  }
+  // An emptied container would be compared with a target that has none
+  const voided = record[VOIDED_RECORDS_KEY];
+  if (voided && Object.values(voided).every(list => !list?.length)) {
+    delete record[VOIDED_RECORDS_KEY];
+  }
+}
+
 /** Admission location obs holding a return visit date (UHM-3407, see the header). */
 function fixReturnDateInAdmissionLocation(record, fixes) {
   for (const encounter of record.encounters ?? []) {
@@ -541,6 +624,9 @@ function fixReturnDateInAdmissionLocation(record, fixes) {
 /** Call on a SOURCE export record, after its orders are sequenced. Changes the record in place. */
 export function applySourceDataFixes(record) {
   const fixes = [];
+  if (isFormEditVoidedTwinsFixEnabled()) {
+    fixFormEditVoidedTwins(record, fixes);
+  }
   if (isVisitStopForEncountersFixEnabled()) {
     fixVisitStopForEncounters(record, fixes);
   }

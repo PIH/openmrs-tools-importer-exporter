@@ -110,7 +110,7 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
 
   // TEMPORARY (HAI-1306): corrections for source data the target's validation rejects
   if (server === 'SOURCE') {
-    await sourceDataFixes.fetchMisfiledReturnDates(record, server);
+    await sourceDataFixes.fetchForSourceDataFixes(record, server);
     sourceDataFixes.applySourceDataFixes(record);
   }
   return record;
