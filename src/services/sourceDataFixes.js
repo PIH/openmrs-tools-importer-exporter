@@ -63,6 +63,19 @@
 //   instructions. Only for the Mixtard drug (MIXTARD_DRUG_UUID) and only for orders that are voided or already
 //   expired (stopped or auto-expired before the export); any other zero-dose order is logged and left as it is,
 //   so its patient still fails and gets looked at. Decided on HAI-1312.
+//   returnDateInAdmissionLocation (FIX_RETURN_DATE_IN_ADMISSION_LOCATION): the long-standing form bug UHM-3407 (see
+//   also UHM-5682), never reproduced: on a form with a disposition, htmlformentry voids the "Return visit date" obs
+//   and, in the same save, stores its date as text (yyyy-mm-dd) in an "Admission location in hospital" obs inside
+//   the disposition construct. That obs holds a location id as text, marked with the comment org.openmrs.Location;
+//   REST can't resolve a date as a location, so the export gets no value (Obs.error.inGroupMember / error.noValue)
+//   and the form can't be edited. On the source servers this was cleaned up by hand: void the admission location
+//   obs and unvoid the return visit date. Fix: turn the admission location obs into a top-level "Return visit date"
+//   obs with that date, which gives the same result without exporting voided obs, and keeps the date as last
+//   submitted (in 1 of the 5 HSN cases it differs from the voided return visit date by 4 days). If the disposition
+//   construct has no other member left, it is left out too, since an empty group can't be saved. Only for this
+//   concept with the location comment and a yyyy-mm-dd text; the text comes from REST's valueText, fetched for
+//   these obs only (fetchMisfiledReturnDates, called before the rules). The disposition construct's other wrong
+//   member in these encounters ("Transfer out location" = Discharged) is left as it is (see UHM-3407).
 //
 // On by default; set a rule's flag to false to turn it off. To remove: delete this file and its calls in
 // exporterService.js, exportPatients.js and verifyPatients.js.
@@ -71,7 +84,9 @@ import path from "path";
 import config from "../utils/config.js";
 import logger from "../utils/logger.js";
 import { increment } from "../utils/metrics.js";
+import CONSTANTS from "../utils/constants.js";
 import { VOIDED_RECORDS_KEY } from "./voidedDispenseOrders.js";
+import { fetchData } from "./openmrsService.js";
 
 export const FIXES_KEY = 'sourceDataFixesHAI1306';
 const LOG_FILE = 'source-data-fixes.csv';
@@ -119,6 +134,40 @@ export function isZeroDoseMixtardFixEnabled() {
 // Insulin, Solution for injection, Neutral human, 70/30 (Mixtard), 100IU/mL, 10mL vial (same uuid on HSN, SSPE and
 // ZL Central)
 const MIXTARD_DRUG_UUID = '77077171-df0f-43c8-9a6b-245914fc143b';
+export function isReturnDateInAdmissionLocationFixEnabled() {
+  return config.FIX_RETURN_DATE_IN_ADMISSION_LOCATION !== 'false';
+}
+
+// "Admission location in hospital" (Text, a location id with the comment org.openmrs.Location) and "Return visit
+// date" (Date); the same uuids on HSN, SSPE and ZL Central
+const ADMISSION_LOCATION_CONCEPT_UUID = 'f3e04276-2db0-4181-b937-d73275dc1b15';
+const RETURN_VISIT_DATE_CONCEPT_UUID = '3ce94df0-26fe-102b-80cb-0017a47871b2';
+const LOCATION_COMMENT = 'org.openmrs.Location';
+const MISFILED_TEXT_KEY = 'valueTextHAI1306';   // temporary, removed by the rule
+
+const isMisfiledCandidate = obs => obs.concept?.uuid === ADMISSION_LOCATION_CONCEPT_UUID
+  && obs.comment === LOCATION_COMMENT && !('value' in obs) && !(obs.groupMembers?.length);
+
+/**
+ * Call on a SOURCE export record before applySourceDataFixes. For each admission location obs that REST gave no
+ * value (its text isn't a location id), fetches the raw text (valueText), which the rule then checks for a date.
+ */
+export async function fetchMisfiledReturnDates(record, server) {
+  if (!isReturnDateInAdmissionLocationFixEnabled()) {
+    return;
+  }
+  for (const encounter of record.encounters ?? []) {
+    for (const group of encounter.obs ?? []) {
+      for (const member of group.groupMembers ?? []) {
+        if (isMisfiledCandidate(member)) {
+          const obs = await fetchData(`${CONSTANTS.SOURCE.URLS.OBS}/${member.uuid}?v=custom:(uuid,valueText)`, server);
+          member[MISFILED_TEXT_KEY] = obs?.valueText ?? null;
+        }
+      }
+    }
+  }
+}
+
 export const ZERO_DOSE_INSTRUCTIONS = 'Dose not recorded (saved as 0 before dose validation; changed in migration, HAI-1306)';
 
 // REST dates look like 2023-06-15T10:14:00.000-0500. The export strips the zone from times at midnight and one
@@ -454,6 +503,41 @@ function fixZeroDoseMixtard(record, fixes) {
   }
 }
 
+/** Admission location obs holding a return visit date (UHM-3407, see the header). */
+function fixReturnDateInAdmissionLocation(record, fixes) {
+  for (const encounter of record.encounters ?? []) {
+    for (const group of [...(encounter.obs ?? [])]) {
+      for (const member of [...(group.groupMembers ?? [])]) {
+        if (!(MISFILED_TEXT_KEY in member)) {
+          continue;
+        }
+        const text = member[MISFILED_TEXT_KEY];
+        delete member[MISFILED_TEXT_KEY];
+        if (!/^\d{4}-\d{2}-\d{2}$/.test(text ?? '')) {
+          logger.warn(`Patient ${record.patient.uuid}: admission location obs ${member.uuid} has no location and no date; left as it is`);
+          increment('HAI-1306 admission location obs without a location left as they are');
+          continue;
+        }
+        const log = (uuid, field, from, to) => fixes.push({ rule: 'returnDateInAdmissionLocation', list: 'obs', uuid, field, from, to });
+        log(member.uuid, 'concept', ADMISSION_LOCATION_CONCEPT_UUID, RETURN_VISIT_DATE_CONCEPT_UUID);
+        log(member.uuid, 'value', null, text);
+        log(member.uuid, 'comment', LOCATION_COMMENT, null);
+        log(member.uuid, 'obsGroup', group.uuid, null);
+        group.groupMembers = group.groupMembers.filter(o => o !== member);
+        const moved = { ...member, concept: { uuid: RETURN_VISIT_DATE_CONCEPT_UUID }, value: text, groupMembers: [] };
+        delete moved.comment;
+        encounter.obs.push(moved);
+        increment('HAI-1306 admission location dates moved to a return visit date');
+        if (group.groupMembers.length === 0 && !('value' in group)) {
+          log(group.uuid, 'groupMembers', 'no members left', 'group left out');
+          encounter.obs = encounter.obs.filter(o => o !== group);
+          increment('HAI-1306 empty disposition constructs left out');
+        }
+      }
+    }
+  }
+}
+
 /** Call on a SOURCE export record, after its orders are sequenced. Changes the record in place. */
 export function applySourceDataFixes(record) {
   const fixes = [];
@@ -490,6 +574,9 @@ export function applySourceDataFixes(record) {
   }
   if (isOverlappingDrugOrdersFixEnabled()) {
     fixOverlappingDrugOrders(record, fixes);
+  }
+  if (isReturnDateInAdmissionLocationFixEnabled()) {
+    fixReturnDateInAdmissionLocation(record, fixes);
   }
   if (isZeroDoseMixtardFixEnabled()) {
     fixZeroDoseMixtard(record, fixes);   // after the rules that change stop and auto-expire dates

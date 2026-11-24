@@ -78,3 +78,8 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
     instructions saying it wasn't recorded (no dose is made up). Only for that drug and only for orders that are voided
     or already expired; other zero-dose orders are logged and left as they are. The Outpatient Followup form shows
     these orders with a blank dose and without the free-text instructions.
+  - *Return visit date saved as an admission location* (`FIX_RETURN_DATE_IN_ADMISSION_LOCATION`, on by default;
+    `false` turns it off): the form bug UHM-3407 voids the "Return visit date" obs and stores its date as text in the
+    disposition construct's "Admission location in hospital" obs, which then can't be saved. That obs becomes a
+    top-level "Return visit date" with the date (what the manual cleanups did); a disposition construct left with no
+    members is left out.
