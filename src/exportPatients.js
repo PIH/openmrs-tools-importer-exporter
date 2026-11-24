@@ -9,6 +9,16 @@ import {getGlobalProperty, setGlobalProperty} from "./services/openmrsService.js
 import Constants from "./utils/constants.js";
 import { increment, writeMetrics } from "./utils/metrics.js";
 
+// Every server numbers its orders ORD-1, ORD-2, ..., so the export prefixes order numbers and "Test order number"
+// obs with the source site's dossier prefix to keep them unique on the target (UHM-8864). Without it the orders
+// would import with order numbers that clash on the target, and nothing else would notice, so stop here.
+if (!/^[A-Za-z0-9]+$/.test(config.ORDER_NUMBER_PREFIX ?? '')) {
+  logger.error(config.ORDER_NUMBER_PREFIX
+    ? `ORDER_NUMBER_PREFIX "${config.ORDER_NUMBER_PREFIX}" must be letters and digits only (the site's dossier prefix, e.g. SSPE); nothing exported`
+    : `ORDER_NUMBER_PREFIX is not set: set it to the source site's dossier prefix (e.g. SSPE) so order numbers stay unique on the target; nothing exported`);
+  process.exit(1);
+}
+
 const UUID_FILE_PATH = path.join(config.EXPORT_PATIENT_LIST_FILE);
 const patientsToExport = loadUuidsFromFile(UUID_FILE_PATH);
 

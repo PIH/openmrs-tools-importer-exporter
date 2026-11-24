@@ -6,6 +6,8 @@ OPENMRS_TARGET_CONTEXT_PATH=http://localhost:8080/openmrs
 OPENMRS_TARGET_USERNAME=test
 OPENMRS_TARGET_PASSWORD=test123
 OPENMRS_SOURCE_FACILITY_UUID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
+# Required by exportPatients.js: the source site's dossier prefix, added to order numbers (ORD-1 -> SSPE-ORD-1)
+ORDER_NUMBER_PREFIX=SSPE
 OPENMRS_HEALTH_CENTER_ATTRIBUTE_UUID=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx
 EXPORT_PATIENT_LIST_FILE=/tmp/patient-uuids.csv
 EXPORT_PERSON_LIST_FILE=/tmp/person-uuids.csv
