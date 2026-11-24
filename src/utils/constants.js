@@ -52,6 +52,7 @@ export default {
       PROGRAM_ENROLLMENT: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/programenrollment`,
       RELATIONSHIP: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/relationship`,
       GLOBAL_PROPERTY: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/systemsetting`,
+      LOCATION: `${config.OPENMRS_TARGET_CONTEXT_PATH}/ws/rest/v1/location`,
     }
   },
   PERSON_CUSTOM_REP: `v=custom:${PERSON_REP}`,

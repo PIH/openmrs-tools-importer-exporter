@@ -66,6 +66,22 @@ export async function fetchData(url, server = 'SOURCE') {
   }
 }
 
+// GET that returns null, without logging an error, when the resource doesn't exist (404)
+export async function fetchDataIfExists(url, server = 'SOURCE') {
+  try {
+    const response = await timed('GET', url, () => getClient(server).get(url));
+    if (typeof response.data === 'string' && response.status !== 204) {
+      throw new Error('Bad Response - Unauthenticated?');
+    }
+    return response.data;
+  } catch (err) {
+    if (err.response?.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
 // Try to GET a resource by UUID; if 404, POST it instead
 // ie, if a resource already exists, we simply skip and move
 // Returns 'created' or 'existed'. With skipExistenceCheck, POSTs directly: for children of a patient that

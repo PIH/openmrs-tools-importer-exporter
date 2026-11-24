@@ -15,6 +15,8 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
 
 `node exportUsers.js`
 `node importUsers.js`
+`node verifyUsers.js` (checks that each imported user has access to `OPENMRS_SOURCE_FACILITY_UUID`, through the
+`allowedVisitLocations` user property; problems go to `LOG_HOME/verify-users.csv`)
 
 `node exportProviders.js`
 `node importProviders.js`
