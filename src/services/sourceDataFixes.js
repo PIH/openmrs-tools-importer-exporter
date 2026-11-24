@@ -792,6 +792,42 @@ export function logSourceDataFixes(record) {
   return write;
 }
 
+// A double-encoded HTML entity (&amp;lt;, &amp;gt;, &amp;quot;, &amp;amp;, &amp;#39; ...): text that was HTML-encoded
+// on save twice (UHM-9691)
+const DOUBLE_ENCODED = /&amp;(?=(?:lt|gt|quot|amp|apos|#\d+|#x[0-9a-fA-F]+);)/g;
+let encodedTextNormalized = 0;
+
+/** How many obs text values normalizeEncodedTextForVerification has matched so far. */
+export function encodedTextNormalizedCount() {
+  return encodedTextNormalized;
+}
+
+/**
+ * Call on the target record and the file contents before verification compares them. UHM-9691: free text has
+ * been stored HTML-encoded since mid-2025, and a note saved again gets encoded twice (&lt; -> &amp;lt;). The target
+ * stores such a value with one level of encoding removed (&amp;lt; -> &lt;). When the target's obs text is exactly
+ * the file's with that one level removed, the file's value is put on the target record so they compare equal; any
+ * other difference in the text still fails. Each match is counted (encodedTextNormalizedCount) and logged.
+ */
+export function normalizeEncodedTextForVerification(targetRecord, fileRecord, patientUuid) {
+  const targetObs = new Map();
+  const collect = list => (list ?? []).forEach(o => { targetObs.set(o.uuid, o); collect(o.groupMembers); });
+  collect(targetRecord?.obs);
+  (targetRecord?.encounters ?? []).forEach(e => collect(e.obs));
+  const check = list => (list ?? []).forEach(o => {
+    const t = targetObs.get(o.uuid);
+    if (t && typeof o.value === 'string' && typeof t.value === 'string' && t.value !== o.value
+      && o.value.replace(DOUBLE_ENCODED, '&') === t.value) {
+      t.value = o.value;
+      encodedTextNormalized++;
+      logger.info(`Patient ${patientUuid}: obs ${o.uuid} text has one level of HTML encoding removed on the target (UHM-9691); treated as equal`);
+    }
+    check(o.groupMembers);
+  });
+  check(fileRecord?.obs);
+  (fileRecord?.encounters ?? []).forEach(e => check(e.obs));
+}
+
 /**
  * Call on the target record and the file contents before verification compares them. The fixes list is only in
  * the file. A fixed date the export wrote without a zone (midnight dates; a renewal moved to 00:00:01) comes back

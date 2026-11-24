@@ -112,6 +112,7 @@ async function verifyPatients() {
 
           // TEMPORARY (HAI-1306)
           sourceDataFixes.normalizeForVerification(patientRecord, parsedFileContents);
+          sourceDataFixes.normalizeEncodedTextForVerification(patientRecord, parsedFileContents, uuid);   // UHM-9691
 
           // Sanitize both objects (remove whitespace and normalize structure)
           const sanitizedPatientRecord = sanitizeObject(patientRecord);
@@ -152,6 +153,7 @@ async function verifyPatients() {
 
     // All batches completed
     logger.info('🎉 All patients processed for verification.');
+    logger.info(`Obs text with one level of HTML encoding removed on the target, treated as equal (UHM-9691): ${sourceDataFixes.encodedTextNormalizedCount()}`);
   } catch (error) {
     // Catch unexpected errors
     logger.error('⚠️ Unexpected error occurred while verifying patients:', error);
