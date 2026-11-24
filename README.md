@@ -23,6 +23,14 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
 `node importPatients.js
 `
 
+## Order numbers
+
+`exportPatients.js` requires `ORDER_NUMBER_PREFIX`, set to the source site's dossier prefix (e.g. `SSPE`, `HSN`;
+letters and digits only), and stops without exporting anything if it is missing. Every server numbers its orders
+`ORD-1`, `ORD-2`, ..., so the export adds the prefix to each order number and to each "Test order number" obs
+(`ORD-123` becomes `SSPE-ORD-123`), which keeps them unique on the target (UHM-8864). Accession numbers are copied as
+they are (HAI-1316).
+
 ## Reports in LOG_HOME
 
 Besides `app.log`, the export and import write these reports to `LOG_HOME`. They hold patient identifiers, so
