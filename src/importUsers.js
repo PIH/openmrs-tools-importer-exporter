@@ -41,7 +41,8 @@ const BATCH_SIZE = 1;
  *
  *  Future features
  *    - retire users -- do we want to retire all migrated users?
- *    - verify - do we want/need to create a verify script for users?
+ *
+ *  verifyUsers.js checks afterwards that every imported user has access to OPENMRS_SOURCE_FACILITY_UUID
  *
  *  Intended use case
  *    - Administrator unretires (assuming we start retiring users) and either resets password manually or (ideally) allows user to reset password via email
@@ -112,6 +113,11 @@ async function processFile(file) {
 async function appendAllowedVisitLocation(targetUuid, facilityUuid) {
   const user = await fetchData(`${CONSTANTS.TARGET.URLS.USER}/${targetUuid}`, 'TARGET');
   const existing = user.userProperties?.allowedVisitLocations;
+  // importUsers.js may be run more than once, so don't add the facility again if the user already has it
+  if (existing && existing.split(',').map(uuid => uuid.trim()).includes(facilityUuid)) {
+    logger.info(`User ${targetUuid} already has ${facilityUuid} in allowedVisitLocations`);
+    return;
+  }
   const updated = existing ? `${existing},${facilityUuid}` : facilityUuid;
   await postData(`${CONSTANTS.TARGET.URLS.USER}/${targetUuid}`, {
     userProperties: { ...user.userProperties, allowedVisitLocations: updated }
