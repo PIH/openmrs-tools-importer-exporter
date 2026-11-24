@@ -23,6 +23,23 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
 `node importPatients.js
 `
 
+## Reports in LOG_HOME
+
+Besides `app.log`, the export and import write these reports to `LOG_HOME`. They hold patient identifiers, so
+share them only through the site's usual channels (not Jira).
+
+- `invalid-identifiers.csv` (import): every patient identifier the import had to change for the target to accept
+  the patient, for the site team to clean up. One row per change: `change`, `patient` (uuid), `zlEmrId`,
+  `dossierNumber`, `identifierType`, `identifier`, `newIdentifierType`, `newIdentifier`. The changes are
+  `invalidZlEmrId` (a ZL EMR ID that doesn't match the target's format is kept, but moved to the invalid identifier
+  type, `INVALID_IDENTIFIER_TYPE_UUID`) and `duplicateIdentifier` (an identifier already used by another patient on
+  the target gets the prefix `DPL-`). The ZL EMR ID and dossier number columns show the patient's values at the
+  time of the change, so a duplicate row after an invalid ZL EMR ID move has an empty `zlEmrId`. This replaces the
+  free-text `invalid-identifiers.log`.
+- `source-data-fixes.csv` (export): the HAI-1306 source data fixes, see below.
+- `visits-before-birthdate.csv` (import): the HAI-1311 patients, see below.
+- `export-failed-patients.txt` (export, only if any failed) and the `export-metrics`/`import-metrics` files.
+
 
 
 

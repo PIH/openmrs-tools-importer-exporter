@@ -17,12 +17,4 @@ const logger = createLogger({
   ]
 });
 
-export const invalidIdentifierLogger = createLogger({
-  level: 'info',
-  format: format.printf(({ message }) => message),
-  transports: [
-    new transports.File({ filename: path.join(config.LOG_HOME, 'invalid-identifiers.log') })
-  ]
-});
-
 export default logger;

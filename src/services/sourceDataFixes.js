@@ -122,9 +122,8 @@
 //
 // On by default; set a rule's flag to false to turn it off. To remove: delete this file and its calls in
 // exporterService.js, exportPatients.js and verifyPatients.js.
-import fs from "fs/promises";
-import path from "path";
 import config from "../utils/config.js";
+import { appendCsvRows } from "../utils/csvLog.js";
 import logger from "../utils/logger.js";
 import { increment } from "../utils/metrics.js";
 import CONSTANTS from "../utils/constants.js";
@@ -852,36 +851,14 @@ export function applySourceDataFixes(record) {
   return record;
 }
 
-// Quotes a CSV value that has a comma, quote or line break (the free-text dosing instructions)
-function csvField(value) {
-  const text = String(value);
-  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
-}
-
-// Patients are exported concurrently: writes go through one chain, so the header is written once
-let logQueue = Promise.resolve();
-
 /** Call once the patient file is written: appends the record's fixes to LOG_HOME/source-data-fixes.csv. */
 export function logSourceDataFixes(record) {
   const fixes = record?.[FIXES_KEY];
   if (!fixes?.length) {
     return Promise.resolve();
   }
-  const lines = fixes.map(fix =>
-    [fix.rule, record.patient.uuid, fix.list, fix.uuid, fix.field, fix.from ?? '', fix.to ?? ''].map(csvField).join(',')).join('\n');
-  const write = logQueue.then(async () => {
-    const file = path.join(config.LOG_HOME, LOG_FILE);
-    await fs.mkdir(config.LOG_HOME, { recursive: true });
-    let header = '';
-    try {
-      await fs.access(file);
-    } catch {
-      header = 'rule,patient,list,uuid,field,from,to\n';
-    }
-    await fs.appendFile(file, `${header}${lines}\n`);
-  });
-  logQueue = write.catch(() => {});
-  return write;
+  return appendCsvRows(LOG_FILE, ['rule', 'patient', 'list', 'uuid', 'field', 'from', 'to'],
+    fixes.map(fix => [fix.rule, record.patient.uuid, fix.list, fix.uuid, fix.field, fix.from, fix.to]));
 }
 
 // A double-encoded HTML entity (&amp;lt;, &amp;gt;, &amp;quot;, &amp;amp;, &amp;#39; ...): text that was HTML-encoded
