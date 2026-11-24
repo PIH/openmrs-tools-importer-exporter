@@ -4,6 +4,7 @@ import {fetchData} from "./openmrsService.js";
 import logger from "../utils/logger.js";
 import { increment } from "../utils/metrics.js";
 import * as voidedDispenseOrders from "./voidedDispenseOrders.js";
+import * as sourceDataFixes from "./sourceDataFixes.js";
 import {sortByUuid, stripTimeComponentFromDatesAtMidnightAndSecondBeforeMidnight} from "../utils/utils.js";
 
 // Must match the max-results value exportPatients.js and verifyPatients.js set on the server
@@ -73,25 +74,44 @@ export async function exportPatient(patientUuid, server = 'SOURCE') {
   const encounterlessObs = await Promise.all(encounterlessObsUuids.map(uuid =>
     fetchData(`${obsBaseUrl}/${uuid}?${CONSTANTS.OBS_CUSTOM_REP}`, server)));
 
+  // TEMPORARY (HAI-1306): voided orders that the drug orders refer to as their previous order; sequenced with the
+  // drug orders (so references to them are kept), then moved to the voided records below
+  const drugOrderResults = drugOrderData ? drugOrderData.results : [];
+  const voidedPrevious = voidedDispenseOrders.isVoidedPreviousEnabled()
+    ? await voidedDispenseOrders.fetchVoidedPreviousOrders(drugOrderResults, server, patientUuid) : [];
+
   const record = {
     patient: parsePatient(patientData),
     visits: parseVisits(visitsData ? visitsData.results : []),
     encounters: parseEncounters(encountersData ? encountersData.results : [], server),
     obs: parseObsList(encounterlessObs, server),   // note that this is only encounterless obs, the majority of the obs will be coming in via the encounter
     testOrders: parseTestOrderList(testOrderData ? testOrderData.results : [], server),
-    drugOrders: parseDrugOrderList(drugOrderData ? drugOrderData.results : [], server),
+    drugOrders: parseDrugOrderList([...drugOrderResults, ...voidedPrevious], server),
     medicationDispenses: parseMedicationDispense(medicationDispenseData ? medicationDispenseData.results : []),
     programEnrollments: parseProgramEnrollments(patientProgramsData ? patientProgramsData.results : []),
     allergies: parseAllergies(allergiesData ? allergiesData.results : [])
   };
 
+  const voidedPreviousUuids = new Set(voidedPrevious.map(order => order.uuid));
+  const voidedPreviousOrders = record.drugOrders.filter(order => voidedPreviousUuids.has(order.uuid));
+  record.drugOrders = record.drugOrders.filter(order => !voidedPreviousUuids.has(order.uuid));
+
   // TEMPORARY (HAI-1305): the voided drug orders and encounters that dispenses point to
+  const parseEncounter = (encounter, s) => parseEncounters([encounter], s)[0];
+  let voided;
   if (voidedDispenseOrders.isEnabled()) {
-    const voided = await voidedDispenseOrders.exportVoidedRecordsForDispenses(record, server,
-      { parseDrugOrder, parseEncounter: (encounter, s) => parseEncounters([encounter], s)[0] });
-    if (voided) {
-      record[voidedDispenseOrders.VOIDED_RECORDS_KEY] = voided;
-    }
+    voided = await voidedDispenseOrders.exportVoidedRecordsForDispenses(record, server,
+      { parseDrugOrder, parseEncounter }, voidedPreviousUuids);
+  }
+  voided = await voidedDispenseOrders.addVoidedPreviousOrders(voided, voidedPreviousOrders, server, parseEncounter);
+  if (voided) {
+    record[voidedDispenseOrders.VOIDED_RECORDS_KEY] = voided;
+  }
+
+  // TEMPORARY (HAI-1306): corrections for source data the target's validation rejects
+  if (server === 'SOURCE') {
+    await sourceDataFixes.fetchForSourceDataFixes(record, server);
+    sourceDataFixes.applySourceDataFixes(record);
   }
   return record;
 

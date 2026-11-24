@@ -3,6 +3,7 @@ import path from 'path';
 import config from './utils/config.js';
 import logger from './utils/logger.js';
 import { exportPatient } from "./services/exporterService.js";
+import { logSourceDataFixes } from "./services/sourceDataFixes.js";
 import { loadUuidsFromFile } from './services/fileService.js'
 import {getGlobalProperty, setGlobalProperty} from "./services/openmrsService.js";
 import Constants from "./utils/constants.js";
@@ -83,6 +84,7 @@ async function exportAllPatients() {
         try {
           const patientRecord = await exportPatient(patientUuid);
           await fs.writeFile(filePath, JSON.stringify(patientRecord, null, JSON_INDENT));
+          await logSourceDataFixes(patientRecord);   // TEMPORARY (HAI-1306)
           logger.info(`Patient data exported to ${filename}`);
           increment('patients exported');
           if (attempt > 1) {
