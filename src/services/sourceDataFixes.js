@@ -52,6 +52,17 @@
 //   orders active *now* for a same-day save, so an earlier order that had already ended by then wasn't seen. Fix:
 //   stop the earlier order one second before the later one starts. Skipped (and logged) when an order stops the
 //   earlier one, since that order would still overlap. Runs last, on the final start and stop dates.
+//   zeroDoseMixtard (FIX_ZERO_DOSE_MIXTARD): HSN Mixtard 70/30 insulin orders saved with a dose of 0
+//   (DrugOrder.error.doseZeroOrLess). They were entered on the Outpatient Followup (Adult) form between
+//   2026-03-13 and 2026-04-21, before HSN ran core 2.8.5 (TRUNK-6576), which added the dose > 0 check. The real dose
+//   wasn't recorded. A dose of 1 or any other number would be invented, and for a high-alert drug a believable but
+//   wrong dose is worse than a missing one (other Mixtard orders in units are nearly all 10-49 units). Fix: make it
+//   a free-text order: dosingType FreeTextDosingInstructions, dose and doseUnits cleared, and dosingInstructions
+//   saying the dose wasn't recorded. Frequency, route and quantity are kept. Note that the form's drug order widget
+//   only does simple dosing, so the form shows these orders with a blank dose and doesn't show the free-text
+//   instructions. Only for the Mixtard drug (MIXTARD_DRUG_UUID) and only for orders that are voided or already
+//   expired (stopped or auto-expired before the export); any other zero-dose order is logged and left as it is,
+//   so its patient still fails and gets looked at. Decided on HAI-1312.
 //
 // On by default; set a rule's flag to false to turn it off. To remove: delete this file and its calls in
 // exporterService.js, exportPatients.js and verifyPatients.js.
@@ -100,6 +111,15 @@ export function isAutoExpireBeforeStartFixEnabled() {
 export function isOverlappingDrugOrdersFixEnabled() {
   return config.FIX_OVERLAPPING_DRUG_ORDERS !== 'false';
 }
+
+export function isZeroDoseMixtardFixEnabled() {
+  return config.FIX_ZERO_DOSE_MIXTARD !== 'false';
+}
+
+// Insulin, Solution for injection, Neutral human, 70/30 (Mixtard), 100IU/mL, 10mL vial (same uuid on HSN, SSPE and
+// ZL Central)
+const MIXTARD_DRUG_UUID = '77077171-df0f-43c8-9a6b-245914fc143b';
+export const ZERO_DOSE_INSTRUCTIONS = 'Dose not recorded (saved as 0 before dose validation; changed in migration, HAI-1306)';
 
 // REST dates look like 2023-06-15T10:14:00.000-0500. The export strips the zone from times at midnight and one
 // second before midnight (2023-06-15T00:00:00), so those are local times on the target server.
@@ -393,6 +413,47 @@ function fixOverlappingDrugOrders(record, fixes) {
   }
 }
 
+/**
+ * Drug orders with a dose of 0 or less. Only Mixtard orders that are voided or already expired are changed (see the
+ * header); the rest are logged and left as they are.
+ */
+function fixZeroDoseMixtard(record, fixes) {
+  const voided = record[VOIDED_RECORDS_KEY] ?? {};
+  const lists = [
+    ['drugOrders', record.drugOrders ?? [], false],
+    // voided orders carried over for dispenses and as previous orders (HAI-1305/HAI-1306) are posted and then voided
+    // again, so they are validated too
+    ['voidedDrugOrders', voided.drugOrders ?? [], true],
+    ['voidedPreviousOrders', voided.voidedPreviousOrders ?? [], true],
+  ];
+  const now = Date.now();
+  const endedBeforeNow = date => date && !Number.isNaN(Date.parse(date)) && Date.parse(date) <= now;
+  for (const [listName, orders, isVoided] of lists) {
+    for (const order of orders) {
+      if (order.dose === null || order.dose === undefined || !(Number(order.dose) <= 0)) {
+        continue;
+      }
+      const expired = endedBeforeNow(order.dateStopped) || endedBeforeNow(order.autoExpireDate);
+      if (order.drug?.uuid !== MIXTARD_DRUG_UUID || !(isVoided || order.voided || expired)) {
+        logger.warn(`Patient ${record.patient.uuid}: ${listName} ${order.uuid} has a dose of ${order.dose}, but it isn't`
+          + ' a voided or expired Mixtard order; left as it is');
+        increment('HAI-1306 zero-dose drug orders left as they are');
+        continue;
+      }
+      const change = (field, to) => {
+        fixes.push({ rule: 'zeroDoseMixtard', list: listName, uuid: order.uuid, field,
+          from: typeof order[field] === 'object' && order[field] !== null ? order[field].uuid : order[field], to });
+        order[field] = to;
+      };
+      change('dosingType', 'org.openmrs.FreeTextDosingInstructions');
+      change('dosingInstructions', ZERO_DOSE_INSTRUCTIONS);
+      change('dose', null);
+      change('doseUnits', null);
+      increment('HAI-1306 zero-dose Mixtard orders made free-text');
+    }
+  }
+}
+
 /** Call on a SOURCE export record, after its orders are sequenced. Changes the record in place. */
 export function applySourceDataFixes(record) {
   const fixes = [];
@@ -430,11 +491,20 @@ export function applySourceDataFixes(record) {
   if (isOverlappingDrugOrdersFixEnabled()) {
     fixOverlappingDrugOrders(record, fixes);
   }
+  if (isZeroDoseMixtardFixEnabled()) {
+    fixZeroDoseMixtard(record, fixes);   // after the rules that change stop and auto-expire dates
+  }
   if (fixes.length > 0) {
     record[FIXES_KEY] = fixes;
     logger.info(`Patient ${record.patient.uuid}: ${fixes.length} HAI-1306 source data fix(es)`);
   }
   return record;
+}
+
+// Quotes a CSV value that has a comma, quote or line break (the free-text dosing instructions)
+function csvField(value) {
+  const text = String(value);
+  return /[",\n]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
 }
 
 // Patients are exported concurrently: writes go through one chain, so the header is written once
@@ -447,7 +517,7 @@ export function logSourceDataFixes(record) {
     return Promise.resolve();
   }
   const lines = fixes.map(fix =>
-    [fix.rule, record.patient.uuid, fix.list, fix.uuid, fix.field, fix.from ?? '', fix.to].join(',')).join('\n');
+    [fix.rule, record.patient.uuid, fix.list, fix.uuid, fix.field, fix.from ?? '', fix.to ?? ''].map(csvField).join(',')).join('\n');
   const write = logQueue.then(async () => {
     const file = path.join(config.LOG_HOME, LOG_FILE);
     await fs.mkdir(config.LOG_HOME, { recursive: true });
@@ -477,7 +547,8 @@ export function normalizeForVerification(targetRecord, fileRecord) {
   for (const fix of fixes) {
     const order = targetRecord?.[fix.list]?.find(o => o.uuid === fix.uuid);   // an order, encounter or visit
     const targetValue = order?.[fix.field];
-    if (targetValue && fix.to && targetValue !== fix.to && !DATE_REGEX.exec(fix.to)[8]
+    const toDate = DATE_REGEX.exec(fix.to ?? '');   // only dates are matched; other fixed values come back as written
+    if (targetValue && toDate && targetValue !== fix.to && !toDate[8]
       && toSecond(targetValue) === toSecond(fix.to)) {
       order[fix.field] = fix.to;
     }

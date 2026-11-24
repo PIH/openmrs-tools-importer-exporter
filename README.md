@@ -73,3 +73,8 @@ Create a ".env" file from ".sample-env" and include the proper credentials, etc
   - *Overlapping drug orders for the same drug* (`FIX_OVERLAPPING_DRUG_ORDERS`, on by default; `false` turns it off):
     when a drug order starts while an earlier order for the same drug is still active, the earlier one is stopped one
     second before it. Left as it is (and logged) when another order stops the earlier one.
+  - *Zero-dose Mixtard orders* (`FIX_ZERO_DOSE_MIXTARD`, on by default; `false` turns it off): HSN Mixtard 70/30
+    insulin orders saved with a dose of 0 before core checked for it become free-text orders, with the dose cleared and
+    instructions saying it wasn't recorded (no dose is made up). Only for that drug and only for orders that are voided
+    or already expired; other zero-dose orders are logged and left as they are. The Outpatient Followup form shows
+    these orders with a blank dose and without the free-text instructions.
