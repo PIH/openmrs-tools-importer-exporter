@@ -75,7 +75,8 @@ share them only through the site's usual channels (not Jira).
   such a patient's birthdate to the day of their earliest visit, imports everything, then puts the source's birthdate
   (and whether it is estimated) back. The patient arrives as on the source, still with visits before the birthdate,
   and editing one of those visits in ZL Central will fail until the data is corrected. Each patient is counted in the
-  import summary and listed in `LOG_HOME/visits-before-birthdate.csv`. Verification doesn't compare the patient's
+  import summary and listed in `LOG_HOME/visits-before-birthdate.csv` (patient uuid, ZL EMR ID, number of visits
+  before the birthdate). Verification doesn't compare the patient's
   `dateChanged`/`changedBy` for these patients, since the birthdate updates set them and REST can't set them back.
   On by default; `IMPORT_VISITS_BEFORE_BIRTHDATE=false` turns it off. The code is in
   `src/services/visitsBeforeBirthdate.js`.
