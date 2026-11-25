@@ -41,11 +41,12 @@ test_export_starts_session_with_node_command() { _skip_no_tmux && return 0; _set
   _wait_session || { echo "session did not start: $out"; exit 1; }
   assert_contains "$out" "tmux session 'export'"
   assert_contains "$out" 'run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp --network host -v '
-  assert_contains "$out" "-w /app/src mysql:5.6 sh -c 'node exportUsers.js && node exportProviders.js && node exportPatients.js && node exportRelationships.js'"
+  assert_contains "$out" "-v $WORKDIR/srv:$WORKDIR/srv"
+  assert_contains "$out" "-w $WORKDIR/srv/repo/src mysql:5.6 sh -c 'node exportUsers.js && node exportProviders.js && node exportPatients.js && node exportRelationships.js'"
   assert_contains "$out" "export-console.log"
   assert_contains "$out" "Next: 14-copy-exports.sh"
   for _ in $(seq 1 50); do [ -s "$WORKDIR/docker.calls" ] && break; sleep 0.1; done
-  assert_contains "$(cat "$WORKDIR/docker.calls")" "run --rm --user $(id -u):$(id -g) -e HOME=/tmp --network host -v $WORKDIR/srv/repo:/app -w /app/src mysql:5.6 sh -c node exportUsers.js"
+  assert_contains "$(cat "$WORKDIR/docker.calls")" "run --rm --user $(id -u):$(id -g) -e HOME=/tmp --network host -v $WORKDIR/srv:$WORKDIR/srv -w $WORKDIR/srv/repo/src mysql:5.6 sh -c node exportUsers.js"
   touch "$WORKDIR/release"; _wait_gone
   assert_contains "$(cat "$WORKDIR/srv/logs/export-console.log")" "Export summary"
 }

@@ -86,8 +86,8 @@ else
 fi
 echo "Counts in $counts: $(wc -l < "$counts/source-before.txt" | tr -d ' ') source, $(wc -l < "$counts/target-before.txt" | tr -d ' ') target, $(wc -l < "$counts/target-tables-before.txt" | tr -d ' ') target tables"
 
-# $(id -u) and $(id -g) expand on the server (tmux runs the command there).
-node_cmd="$SOURCE_DOCKER run --rm --user \"\$(id -u):\$(id -g)\" -e HOME=/tmp --network host -v $q_dir/repo:/app -w /app/src $NODE_IMAGE sh -c 'node exportUsers.js && node exportProviders.js && node exportPatients.js && node exportRelationships.js'"
+# $(id -u) and $(id -g) expand on the server (tmux runs the command there). The server dir is mounted at the same path so the host paths in the importer .env (exports, logs, lists) exist in the container.
+node_cmd="$SOURCE_DOCKER run --rm --user \"\$(id -u):\$(id -g)\" -e HOME=/tmp --network host -v $q_dir:$q_dir -w $q_dir/repo/src $NODE_IMAGE sh -c 'node exportUsers.js && node exportProviders.js && node exportPatients.js && node exportRelationships.js'"
 start_in_tmux src export work "mkdir -p $q_logs && { $node_cmd; } 2>&1 | tee -a $q_console"
 
 echo "Started. Run this script again to see progress, or: tmux attach -t export (on the source server)."
