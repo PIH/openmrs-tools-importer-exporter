@@ -169,6 +169,28 @@ sql_quote() {
   printf "'%s'" "$s"
 }
 
+# lock_users src|tgt REASON KEEP_USERNAME...: retires every non-retired user except the KEEP_USERNAMEs
+# (retired_by = the first one's user_id). 0 to retire: says so and writes nothing (safe to re-run).
+lock_users() {
+  local side=$1 reason=$2 migrator=$3 keep="" name id n left sql
+  shift 2
+  for name in "$@"; do keep="${keep:+$keep, }$(sql_quote "$name")"; done
+  _lock_q() { if [ "$side" = src ]; then src_sql "$1"; else tgt_sql "$1"; fi; }
+  id=$(_lock_q "select user_id from users where username = $(sql_quote "$migrator")" | head -n 1)
+  if [ -z "$id" ]; then
+    echo "User '$migrator' (MIGRATING_USERNAME) does not exist on the $side database; create it first." >&2
+    exit 2
+  fi
+  n=$(_lock_q "select count(*) from users where retired = 0 and ifnull(username, '') not in ($keep)")
+  echo "$n users to retire on the $side server (kept: $*)"
+  if [ "$n" -gt 0 ]; then
+    sql="update users set retired = 1, retire_reason = $(sql_quote "$reason"), retired_by = $id, date_retired = now() where retired = 0 and ifnull(username, '') not in ($keep)"
+    if [ "$side" = src ]; then src_sql_write "$sql"; else tgt_sql_write "$sql"; fi
+    left=$(_lock_q "select count(*) from users where retired = 0 and ifnull(username, '') not in ($keep)")
+    echo "$left users left that should be retired (expected 0)"
+  fi
+}
+
 tmux_running() { run_on "$1" "tmux has-session -t =$2" >/dev/null 2>&1; }
 
 # start_in_tmux src|tgt SESSION work|cmd CMD: prints CMD, confirms, starts it detached; refuses if
