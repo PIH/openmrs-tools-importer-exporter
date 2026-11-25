@@ -147,14 +147,15 @@ export async function addVoidedPreviousOrders(voided, voidedPreviousOrders, serv
   return result;
 }
 
-// Voids the resource at url on the target, unless it's already voided (a resumed run or a retry); returns
-// whether it voided it
-async function voidOnTarget(url, reason = VOID_REASON) {
+// Voids the resource at url on the target, unless it's already voided (a resumed run or a retry), and logs it in
+// app.log; returns whether it voided it. what: e.g. "drug order <uuid>"
+async function voidOnTarget(record, what, url, reason = VOID_REASON) {
   const current = await fetchData(`${url}?v=custom:(uuid,voided)`, 'TARGET');
   if (current.voided) {
     return false;
   }
   await deleteData(`${url}?reason=${encodeURIComponent(reason)}`);
+  logger.info(`Patient ${record.patient?.uuid}: ${what} voided again on the target ("${reason}")`);
   return true;
 }
 
@@ -179,9 +180,9 @@ export async function importVoidedPreviousOrderFor(record, drugOrder) {
   await post(drugOrder.previousOrder?.uuid);
 }
 
-async function postAndVoidOrder(order) {
+async function postAndVoidOrder(record, order) {
   await postDataIfNotExists(CONSTANTS.TARGET.URLS.ORDER, order, order.uuid);
-  if (await voidOnTarget(`${CONSTANTS.TARGET.URLS.ORDER}/${order.uuid}`)) {
+  if (await voidOnTarget(record, `drug order ${order.uuid}`, `${CONSTANTS.TARGET.URLS.ORDER}/${order.uuid}`)) {
     increment('voided drug orders imported for dispenses');
   }
 }
@@ -206,7 +207,7 @@ export async function importVoidedRecordsBeforeDrugOrders(record) {
   }
   const voidedOrderUuids = new Set(voided.drugOrders.map(order => order.uuid));
   for (const order of voided.drugOrders.filter(order => !needsExportedPreviousOrder(order, voidedOrderUuids))) {
-    await postAndVoidOrder(order);
+    await postAndVoidOrder(record, order);
   }
 }
 
@@ -219,7 +220,7 @@ export async function importVoidedRecordsAfterDrugOrders(record) {
   if (isEnabled()) {
     const voidedOrderUuids = new Set(voided.drugOrders.map(order => order.uuid));
     for (const order of voided.drugOrders.filter(order => needsExportedPreviousOrder(order, voidedOrderUuids))) {
-      await postAndVoidOrder(order);
+      await postAndVoidOrder(record, order);
     }
   }
   // HAI-1306: void the previous orders again, latest first (each was posted before the order that refers to it;
@@ -227,7 +228,8 @@ export async function importVoidedRecordsAfterDrugOrders(record) {
   if (isVoidedPreviousEnabled()) {
     for (const order of [...(voided.voidedPreviousOrders ?? [])].reverse()) {
       await postDataIfNotExists(CONSTANTS.TARGET.URLS.ORDER, order, order.uuid);
-      if (await voidOnTarget(`${CONSTANTS.TARGET.URLS.ORDER}/${order.uuid}`, PREVIOUS_VOID_REASON)) {
+      if (await voidOnTarget(record, `previous drug order ${order.uuid}`, `${CONSTANTS.TARGET.URLS.ORDER}/${order.uuid}`,
+        PREVIOUS_VOID_REASON)) {
         increment('voided previous orders imported (HAI-1306)');
       }
     }
@@ -236,7 +238,7 @@ export async function importVoidedRecordsAfterDrugOrders(record) {
     return;
   }
   for (const encounter of voided.encounters) {
-    if (await voidOnTarget(`${CONSTANTS.TARGET.URLS.ENCOUNTER}/${encounter.uuid}`)) {
+    if (await voidOnTarget(record, `encounter ${encounter.uuid}`, `${CONSTANTS.TARGET.URLS.ENCOUNTER}/${encounter.uuid}`)) {
       increment('voided encounters imported for dispenses');
     }
   }
