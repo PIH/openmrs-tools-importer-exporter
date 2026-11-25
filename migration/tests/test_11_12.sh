@@ -120,7 +120,8 @@ test_npm_ci_runs_docker_with_node_image() { _setup12
   mkdir -p "$WORKDIR/bin"; printf '#!/bin/sh\necho "$@" >> %s/docker.calls\n' "$WORKDIR" > "$WORKDIR/bin/docker"; chmod +x "$WORKDIR/bin/docker"
   rm -f "$WORKDIR/docker.calls"
   out=$(PATH="$WORKDIR/bin:$PATH" MIGRATION_CONFIRM_INPUT="$WORKDIR/yes" MIGRATION_PROMPT_PW_FILE="$WORKDIR/pw" ./12-setup-servers.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
-  assert_eq 2 "$(grep -c "run --rm -v $WORKDIR/.*repo:/app -w /app mysql:5.6 npm ci" "$WORKDIR/docker.calls")"
+  assert_eq 2 "$(grep -c "run --rm --user $(id -u):$(id -g) -e HOME=/tmp -v $WORKDIR/.*repo:/app -w /app mysql:5.6 npm ci" "$WORKDIR/docker.calls")"
+  assert_contains "$out" 'run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp -v '   # printed command; ids expand on the server
 }
 test_skip_npm_ci_refused_in_settings() { _setup12
   echo "SKIP_NPM_CI=true" >> "$WORKDIR/l.env"

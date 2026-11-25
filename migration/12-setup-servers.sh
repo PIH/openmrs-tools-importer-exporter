@@ -126,7 +126,7 @@ _setup() {
   if [ "${MIGRATION_UNDER_TEST:-}" = 1 ] && [ "${SKIP_NPM_CI:-}" = true ]; then
     echo "npm ci skipped (SKIP_NPM_CI, test harness)"
   else
-    _work "$side" "$docker run --rm -v $qrepo:/app -w /app $NODE_IMAGE npm ci"
+    _work "$side" "$docker run --rm --user \"\$(id -u):\$(id -g)\" -e HOME=/tmp -v $qrepo:/app -w /app $NODE_IMAGE npm ci"
   fi
 
   _work "$side" "mkdir -p $(printf '%q' "$dir/exports") $(printf '%q' "$dir/logs")"
