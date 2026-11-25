@@ -25,28 +25,35 @@ select concat('insert into src_providers values (', quote(pr.uuid), ',', quote(p
 _require_read_only_sql "$src_gen"
 
 # Target side, before the source rows: the temporary tables.
-head_sql="create temporary table src_users(uuid char(38), username varchar(50), email varchar(255), retired tinyint, person_uuid char(38));
-create temporary table src_providers(uuid char(38), person_uuid char(38));"
+head_sql="create temporary table src_users(uuid char(38) character set utf8 collate utf8_general_ci, username varchar(50) character set utf8 collate utf8_general_ci, email varchar(255) character set utf8 collate utf8_general_ci, retired tinyint, person_uuid char(38) character set utf8 collate utf8_general_ci);
+create temporary table src_providers(uuid char(38) character set utf8 collate utf8_general_ci, person_uuid char(38) character set utf8 collate utf8_general_ci);"
 
 # Target side, after the source rows: the matching. A temporary table can be used only once per
 # statement in MySQL 5.6, hence the many small steps.
 tail_sql="create temporary table tgt_u as select t.uuid, t.username, lower(trim(t.email)) em, t.retired, t.retire_reason, p.uuid person_uuid from users t join person p on p.person_id = t.person_id;
 create temporary table tgt_prov as select pr.uuid, p.uuid person_uuid from provider pr join person p on p.person_id = pr.person_id;
-create temporary table m_name(s_uuid char(38), t_uuid char(38));
-create temporary table cand(s_uuid char(38), t_uuid char(38));
-create temporary table ccount(s_uuid char(38), n int);
-create temporary table tcount(t_uuid char(38), n int);
-create temporary table m_email(s_uuid char(38), t_uuid char(38));
-create temporary table m_conf(s_uuid char(38), t_uuids text, reason varchar(100));
-create temporary table m_all(s_uuid char(38), t_uuid char(38), how varchar(10));
-create temporary table m_prov(sp_uuid char(38), tp_uuid char(38), label varchar(50));
-create temporary table pcount(sp_uuid char(38), n int);
-insert into m_name select s.uuid, t.uuid from src_users s join tgt_u t on s.username = t.username where s.username <> '';
-insert into cand select s.uuid, t.uuid from src_users s join tgt_u t on t.em = lower(trim(s.email)) where trim(ifnull(s.email, '')) <> '' and s.uuid not in (select s_uuid from m_name);
+create temporary table m_nraw(s_uuid char(38) character set utf8 collate utf8_general_ci, t_uuid char(38) character set utf8 collate utf8_general_ci);
+create temporary table nsc(s_uuid char(38) character set utf8 collate utf8_general_ci, n int);
+create temporary table ntc(t_uuid char(38) character set utf8 collate utf8_general_ci, n int);
+create temporary table m_name(s_uuid char(38) character set utf8 collate utf8_general_ci, t_uuid char(38) character set utf8 collate utf8_general_ci);
+create temporary table cand(s_uuid char(38) character set utf8 collate utf8_general_ci, t_uuid char(38) character set utf8 collate utf8_general_ci);
+create temporary table ccount(s_uuid char(38) character set utf8 collate utf8_general_ci, n int);
+create temporary table tcount(t_uuid char(38) character set utf8 collate utf8_general_ci, n int);
+create temporary table m_email(s_uuid char(38) character set utf8 collate utf8_general_ci, t_uuid char(38) character set utf8 collate utf8_general_ci);
+create temporary table m_conf(s_uuid char(38) character set utf8 collate utf8_general_ci, t_uuids text character set utf8 collate utf8_general_ci, reason varchar(100) character set utf8 collate utf8_general_ci);
+create temporary table m_all(s_uuid char(38) character set utf8 collate utf8_general_ci, t_uuid char(38) character set utf8 collate utf8_general_ci, how varchar(10) character set utf8 collate utf8_general_ci);
+create temporary table m_prov(sp_uuid char(38) character set utf8 collate utf8_general_ci, tp_uuid char(38) character set utf8 collate utf8_general_ci, label varchar(50) character set utf8 collate utf8_general_ci);
+create temporary table pcount(sp_uuid char(38) character set utf8 collate utf8_general_ci, n int);
+insert into m_nraw select s.uuid, t.uuid from src_users s join tgt_u t on s.username = t.username where s.username <> '';
+insert into nsc select s_uuid, count(*) from m_nraw group by s_uuid;
+insert into ntc select t_uuid, count(*) from m_nraw group by t_uuid;
+insert into m_name select a.s_uuid, a.t_uuid from m_nraw a join nsc x on x.s_uuid = a.s_uuid join ntc y on y.t_uuid = a.t_uuid where x.n = 1 and y.n = 1;
+insert into m_conf select a.s_uuid, group_concat(distinct a.t_uuid order by a.t_uuid), if(max(x.n) > 1, 'several target users have this username', 'several source users have the same username as this target user') from m_nraw a join nsc x on x.s_uuid = a.s_uuid join ntc y on y.t_uuid = a.t_uuid group by a.s_uuid having max(x.n) > 1 or max(y.n) > 1;
+insert into cand select s.uuid, t.uuid from src_users s join tgt_u t on t.em = lower(trim(s.email)) where trim(ifnull(s.email, '')) <> '' and s.uuid not in (select s_uuid from m_nraw);
 insert into ccount select s_uuid, count(*) from cand group by s_uuid;
 insert into tcount select t_uuid, count(distinct s_uuid) from cand group by t_uuid;
-insert into m_email select c.s_uuid, c.t_uuid from cand c join ccount x on x.s_uuid = c.s_uuid join tcount y on y.t_uuid = c.t_uuid where x.n = 1 and y.n = 1 and c.t_uuid not in (select t_uuid from m_name);
-insert into m_conf select c.s_uuid, group_concat(distinct c.t_uuid order by c.t_uuid), if(x.n > 1, 'several target users have this email', if(max(y.n) > 1, 'several source users have the same email as this target user', 'target user is the username match of another source user')) from cand c join ccount x on x.s_uuid = c.s_uuid join tcount y on y.t_uuid = c.t_uuid left join m_name n2 on n2.t_uuid = c.t_uuid group by c.s_uuid, x.n having x.n > 1 or max(y.n) > 1 or count(n2.t_uuid) > 0;
+insert into m_email select c.s_uuid, c.t_uuid from cand c join ccount x on x.s_uuid = c.s_uuid join tcount y on y.t_uuid = c.t_uuid where x.n = 1 and y.n = 1 and c.t_uuid not in (select t_uuid from m_nraw);
+insert into m_conf select c.s_uuid, group_concat(distinct c.t_uuid order by c.t_uuid), if(x.n > 1, 'several target users have this email', if(max(y.n) > 1, 'several source users have the same email as this target user', 'target user is the username match of another source user')) from cand c join ccount x on x.s_uuid = c.s_uuid join tcount y on y.t_uuid = c.t_uuid left join m_nraw n2 on n2.t_uuid = c.t_uuid group by c.s_uuid, x.n having x.n > 1 or max(y.n) > 1 or count(n2.t_uuid) > 0;
 insert into m_all select s_uuid, t_uuid, 'username' from m_name;
 insert into m_all select s_uuid, t_uuid, 'email' from m_email;
 insert into m_prov select sp.uuid, tp.uuid, s.username from src_providers sp join src_users s on s.person_uuid = sp.person_uuid join m_all a on a.s_uuid = s.uuid join tgt_u t on t.uuid = a.t_uuid join tgt_prov tp on tp.person_uuid = t.person_uuid;

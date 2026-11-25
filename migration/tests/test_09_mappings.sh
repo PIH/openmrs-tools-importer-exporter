@@ -153,3 +153,19 @@ test_two_source_users_same_email_conflict() { _clear9
   assert_contains "$c" "$(_uid 1 1),alice"; assert_contains "$c" "$(_uid 1 2),alicia"
   assert_not_contains "$(_map unmatched-users.csv)" "$(_uid 1 1)"
 }
+test_two_target_users_same_username_conflict() { _clear9
+  _add9 src_db 1 alice a@x.org 0; _add9 tgt_db 5 Alice t1@x.org 0; _add9 tgt_db 6 alice t2@x.org 0
+  _run9; assert_eq 0 $rc "$out"
+  assert_eq 0 "$(wc -l < "$WORKDIR/mappings/user_mappings.csv" | tr -d ' ')"
+  c=$(_map review-email-conflicts.csv)
+  assert_contains "$c" "$(_uid 1 1),alice,user"; assert_contains "$c" "$(_uid 1 5)"; assert_contains "$c" "$(_uid 1 6)"
+  assert_not_contains "$(_map unmatched-users.csv)" "$(_uid 1 1)"
+}
+test_two_source_users_same_target_username_conflict() { _clear9
+  _add9 src_db 1 alice a@x.org 0; _add9 src_db 2 Alice b@x.org 0; _add9 tgt_db 5 alice t1@x.org 0
+  _run9; assert_eq 0 $rc "$out"
+  assert_eq 0 "$(wc -l < "$WORKDIR/mappings/user_mappings.csv" | tr -d ' ')"
+  c=$(_map review-email-conflicts.csv)
+  assert_contains "$c" "$(_uid 1 1),alice,user"; assert_contains "$c" "$(_uid 1 2),Alice,user"
+  assert_not_contains "$(_map unmatched-users.csv)" "$(_uid 1 2)"
+}
