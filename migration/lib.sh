@@ -37,15 +37,23 @@ load_settings() {
     echo "Settings file not found: '${file}'. Pass it as the first argument or set MIGRATION_ENV (create one with 00-create-settings.sh)." >&2
     exit 2
   fi
+  if grep -Eq '^[[:space:]]*(export[[:space:]]+)?(MIGRATION_CONFIRM_INPUT|MIGRATION_UNDER_TEST|MIGRATION_PROMPT_PW_FILE)=' "$file"; then
+    echo "Settings file must not set MIGRATION_CONFIRM_INPUT, MIGRATION_UNDER_TEST or MIGRATION_PROMPT_PW_FILE (test-harness only)" >&2
+    exit 2
+  fi
   set -a
   # shellcheck disable=SC1090
   source "$file"
   set +a
   : "${SOURCE_DOCKER:=sudo docker}"; : "${TARGET_DOCKER:=sudo docker}"
   : "${SOURCE_MYSQL_AUTH:=container-env}"; : "${TARGET_MYSQL_AUTH:=container-env}"
-  : "${MIGRATION_MODE:=live}"; : "${WAIT_TIMEOUT_SECONDS:=1800}"
+  : "${WAIT_TIMEOUT_SECONDS:=1800}"
   export SOURCE_DOCKER TARGET_DOCKER SOURCE_MYSQL_AUTH TARGET_MYSQL_AUTH MIGRATION_MODE WAIT_TIMEOUT_SECONDS
-  require_settings WORKDIR SOURCE_HOST TARGET_HOST
+  require_settings WORKDIR SOURCE_HOST TARGET_HOST MIGRATION_MODE
+  case "$MIGRATION_MODE" in test|real) ;; *) echo "Setting MIGRATION_MODE must be exactly 'test' or 'real' (got '$MIGRATION_MODE')" >&2; exit 2 ;; esac
+  # Prompt once, up front, in this shell (a later $(src_sql ...) subshell could not keep the answer).
+  [ "$SOURCE_MYSQL_AUTH" != prompt ] || _load_mysql_pw src
+  [ "$TARGET_MYSQL_AUTH" != prompt ] || _load_mysql_pw tgt
   mkdir -p "$WORKDIR/logs"
   _SCRIPT_NAME=$(basename "$0")
   exec > >(tee -a "$WORKDIR/logs/${_SCRIPT_NAME}.$(date +%Y%m%d-%H%M%S).log") 2>&1
@@ -62,22 +70,25 @@ run_on() {
   if [ "$host" = local ]; then bash -c "$cmd"; else ssh "$host" "$cmd"; fi
 }
 
-# MYSQL_PWD for MYSQL_AUTH=prompt: asked once per side, kept in this shell only.
+# MYSQL_AUTH=prompt: ask once per side (sets a global, so call it without $(...)).
+# MIGRATION_PROMPT_PW_FILE (read instead of the tty) is honoured only under MIGRATION_UNDER_TEST=1.
 _SRC_PW=""; _TGT_PW=""
-_mysql_pw() {
-  local side=$1 var=_SRC_PW
-  [ "$side" = tgt ] && var=_TGT_PW
-  if [ -z "${!var}" ]; then
-    local pw
-    read -rsp "MySQL root password for the ${side} server: " pw </dev/tty; echo >&2
-    printf -v "$var" '%s' "$pw"
+_load_mysql_pw() {
+  local var=_SRC_PW pw
+  [ "$1" = tgt ] && var=_TGT_PW
+  [ -z "${!var}" ] || return 0
+  if [ "${MIGRATION_UNDER_TEST:-}" = 1 ] && [ -n "${MIGRATION_PROMPT_PW_FILE:-}" ]; then
+    IFS= read -r pw <"$MIGRATION_PROMPT_PW_FILE"
+  else
+    read -rsp "MySQL root password for the $1 server: " pw </dev/tty; echo >&2
   fi
-  printf '%s' "${!var}"
+  printf -v "$var" '%s' "$pw"
 }
 
 # _mysql_run side SQL: runs SQL with the mysql client inside the container. -N -B tab output.
 # The password never appears on a command line or in a log: container-env reads the
-# container's own MYSQL_ROOT_PASSWORD; prompt sends the typed one as the first stdin line.
+# container's own MYSQL_ROOT_PASSWORD; prompt sends the typed one as the first stdin line,
+# read inside the container (no -e, no host env var, so it also works with "sudo docker").
 _mysql_run() {
   local side=$1 sql=$2 docker container db auth
   if [ "$side" = src ]; then
@@ -87,25 +98,44 @@ _mysql_run() {
   fi
   case "$auth" in
     container-env)
-      run_on "$side" "$docker exec -i $container sh -c 'MYSQL_PWD=\"\$MYSQL_ROOT_PASSWORD\" exec mysql -uroot -N -B \"\$0\"' $db" <<<"$sql" ;;
+      run_on "$side" "$docker exec -i $container sh -c 'MYSQL_PWD=\"\$MYSQL_ROOT_PASSWORD\" exec mysql -uroot -N -B \"\$0\"' $db" < <(printf '%s\n' "$sql") ;;
     prompt)
-      local pw; pw=$(_mysql_pw "$side")
-      run_on "$side" "IFS= read -r MYSQL_PWD; export MYSQL_PWD; $docker exec -i -e MYSQL_PWD $container sh -c 'exec mysql -uroot -N -B \"\$0\"' $db" <<<"$pw"$'\n'"$sql" ;;
+      _load_mysql_pw "$side"
+      local pw=_SRC_PW; [ "$side" = tgt ] && pw=_TGT_PW
+      run_on "$side" "$docker exec -i $container sh -c 'IFS= read -r MYSQL_PWD; export MYSQL_PWD; exec mysql -uroot -N -B \"\$0\"' $db" < <(printf '%s\n%s\n' "${!pw}" "$sql") ;;
     *) echo "Unknown MYSQL_AUTH '$auth' for the $side server (use container-env or prompt)" >&2; return 2 ;;
   esac
 }
 
 # Read-only queries: print the SQL first, rows on stdout.
-src_sql() { _dim "[source SQL] $1"; _mysql_run src "$1"; }
-tgt_sql() { _dim "[target SQL] $1"; _mysql_run tgt "$1"; }
+# Anything that is not select/show/describe/desc/explain/with is rejected: use *_sql_write.
+_require_read_only_sql() {
+  local s=$1
+  local kw
+  while :; do
+    if [[ $s =~ ^[[:space:]]+ ]]; then s=${s#"${BASH_REMATCH[0]}"}
+    elif [[ $s == --* ]]; then case "$s" in *$'\n'*) s=${s#*$'\n'} ;; *) s="" ;; esac
+    elif [[ $s == /\** ]]; then case "$s" in *'*/'*) s=${s#*'*/'} ;; *) s="" ;; esac
+    else break; fi
+  done
+  kw=$(printf '%s' "$s" | tr -c 'A-Za-z\n' ' ' | awk '{print tolower($1); exit}')
+  case "$kw" in select|show|describe|desc|explain|with) return 0 ;; esac
+  echo "src_sql/tgt_sql are read-only (select/show/describe/explain/with only); use src_sql_write/tgt_sql_write for: $1" >&2
+  exit 2
+}
+src_sql() { _require_read_only_sql "$1"; _dim "[source SQL] $1"; _mysql_run src "$1"; }
+tgt_sql() { _require_read_only_sql "$1"; _dim "[target SQL] $1"; _mysql_run tgt "$1"; }
 
 # confirm "what this changes": y/yes continues, anything else (or no tty) exits 1.
-# MIGRATION_CONFIRM_INPUT is TEST-ONLY (replaces /dev/tty); never put it in a settings file.
+# MIGRATION_CONFIRM_INPUT replaces /dev/tty ONLY when MIGRATION_UNDER_TEST=1 (set by tests/run.sh);
+# load_settings refuses settings files that set either. MIGRATION_MODE=test does not enable it.
 confirm() {
   local ans=""
   echo "About to: $1" >&2
   printf 'Proceed? [y/N] ' >&2
-  read -r ans 2>/dev/null <"${MIGRATION_CONFIRM_INPUT:-/dev/tty}" || true
+  local in=/dev/tty
+  [ "${MIGRATION_UNDER_TEST:-}" = 1 ] && in=${MIGRATION_CONFIRM_INPUT:-/dev/tty}
+  read -r ans 2>/dev/null <"$in" || true
   echo >&2
   case "$ans" in y|Y|yes|YES|Yes) return 0 ;; esac
   echo "Not confirmed, stopping." >&2
@@ -141,15 +171,19 @@ sql_quote() {
 
 tmux_running() { run_on "$1" "tmux has-session -t =$2" >/dev/null 2>&1; }
 
-# start_in_tmux src|tgt SESSION CMD: starts CMD detached; refuses if SESSION is already running.
-# Does not confirm by itself: callers confirm (and respect test mode) before calling.
+# start_in_tmux src|tgt SESSION work|cmd CMD: prints CMD, confirms, starts it detached; refuses if
+# SESSION is already running. kind "cmd" (database/service changes) is refused on src in test mode;
+# "work" (only reads the DB and writes files under *_SERVER_DIR, e.g. export) is allowed.
 start_in_tmux() {
-  local side=$1 session=$2 cmd=$3
+  local side=$1 session=$2 kind=$3 cmd=$4
+  case "$kind" in work|cmd) ;; *) echo "start_in_tmux: kind must be work or cmd" >&2; return 2 ;; esac
+  [ "$side$kind" = srccmd ] && _refuse_in_test_mode "tmux command" source
   if tmux_running "$side" "$session"; then
     echo "tmux session '$session' is already running on the $side server; attach with: tmux attach -t $session" >&2
     return 1
   fi
   _dim "[$side tmux:$session] $cmd"
+  confirm "start this in tmux session '$session' on the $side server"
   run_on "$side" "tmux new-session -d -s $session $(printf '%q' "$cmd")"
 }
 
@@ -167,7 +201,7 @@ wait_for_target() {
 
 step_header() {
   echo "=== Step $1: $2 ==="
-  echo "Mode: ${MIGRATION_MODE:-live}   ${SOURCE_NAME:-source} (${SOURCE_HOST:-?}) -> target (${TARGET_HOST:-?})"
+  echo "Mode: ${MIGRATION_MODE:-?}   ${SOURCE_NAME:-source} (${SOURCE_HOST:-?}) -> target (${TARGET_HOST:-?})"
 }
 
 # next_step "NN-name.sh" "check first": footer, only reached when the script succeeded.

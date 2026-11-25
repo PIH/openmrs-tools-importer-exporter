@@ -1,4 +1,5 @@
 -- OpenMRS schema subset (no data) from a local ZL Central 2.8 copy, for migration script tests. AUTO_INCREMENT values and foreign keys removed.
+-- Listed tables that did NOT exist in the source DB: users_session_log (no equivalent table; see Task 3 note).
 -- 'Notes' = core note table; 'Paper Records' = paperrecord_paper_record.
 
 /*!40101 SET @OLD_CHARACTER_SET_CLIENT=@@CHARACTER_SET_CLIENT */;

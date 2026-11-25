@@ -7,7 +7,8 @@ cd "$HERE/.." || exit 2
 export PATH="$HERE:$PATH"
 export WORKDIR; WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
-# Test-only: confirm reads its answer from stdin instead of /dev/tty.
+# Harness-only (lib.sh ignores MIGRATION_CONFIRM_INPUT without MIGRATION_UNDER_TEST=1): confirm reads its answer from stdin instead of /dev/tty.
+export MIGRATION_UNDER_TEST=1
 export MIGRATION_CONFIRM_INPUT=/dev/stdin
 
 source lib.sh
