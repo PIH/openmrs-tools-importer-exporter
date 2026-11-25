@@ -16,6 +16,7 @@ if [ "\$1" = run ]; then
   echo "\$@" >> $WORKDIR/docker.calls
   case "\$*" in
     *importPatients.js)
+      if [ -f $WORKDIR/tsrv/pass1.done ]; then [ -f $WORKDIR/tsrv/exports/f_patient.json ] && [ ! -e $WORKDIR/tsrv/exports/failed/f_patient.json ] && echo ok >> $WORKDIR/tsrv/prep.marker; else mkdir -p $WORKDIR/tsrv/exports/failed; echo {} > $WORKDIR/tsrv/exports/failed/f_patient.json; touch $WORKDIR/tsrv/pass1.done; fi
       echo "[t] INFO: Starting import of 3 patient files with batch size 5."
       echo "[t] INFO: Successfully processed patient from file a_patient.json"
       echo "[t] INFO: Successfully processed patient from file b_patient.json"
@@ -73,9 +74,11 @@ test_import_patients_runs_chain_then_finishes() { _skip_no_tmux && return 0; _se
   assert_contains "$out" "-v $WORKDIR/tsrv:$WORKDIR/tsrv -w $WORKDIR/tsrv/repo/src mysql:5.6 node importProviders.js"
   assert_contains "$out" "import-patients-console.log"
   _wait17
+  assert_contains "$(cat "$WORKDIR/tsrv/prep.marker" 2>/dev/null)" "ok"
   assert_eq "importProviders.js importPatients.js importPatients.js importRelationships.js" "$(sed 's/.* node //' "$WORKDIR/docker.calls" | tr '\n' ' ' | sed 's/ $//')"
+  [ -f "$WORKDIR/tsrv/patients-failed-pass1/f_patient.json" ] || { echo "no pass1 copy"; exit 1; }
   testdb.sh sql tgt_db "set global innodb_flush_log_at_trx_commit = 2"
-  _run17 $'y\n'; assert_eq 0 $rc "$out"
+  _run17 $'y\nn\n'; assert_eq 0 $rc "$out"
   assert_contains "$out" "SET GLOBAL innodb_flush_log_at_trx_commit = 1"
   assert_eq 1 "$(testdb.sh sql tgt_db 'select @@global.innodb_flush_log_at_trx_commit')"
   assert_contains "$out" "innodb_flush_log_at_trx_commit is now: 1"
@@ -121,4 +124,30 @@ test_copy_files_not_confirmed_changes_nothing() { _setup17
   _mk18 storage s s.txt
   _run18 $'y\nn\n'; assert_eq 1 $rc "$out"
   [ ! -e "$WORKDIR/tdata/storage" ] || { echo "target written"; exit 1; }
+}
+
+test_import_patients_restart_after_completed_run() { _skip_no_tmux && return 0; _setup17
+  echo old-console > "$WORKDIR/tsrv/logs/import-patients-console.log"; touch "$WORKDIR/tsrv/logs/import-patients.done"; touch "$WORKDIR/release"
+  _run17 $'y\ny\ny\ny\n'; assert_eq 0 $rc "$out"
+  [ ! -e "$WORKDIR/tsrv/logs/import-patients.done" ] || { echo "marker not cleared"; exit 1; }
+  assert_eq old-console "$(cat "$WORKDIR"/tsrv/logs/import-patients-console.2*.log)"
+  assert_contains "$out" "tmux session 'import-patients'"
+  _wait17; assert_contains "$(cat "$WORKDIR/tsrv/logs/import-patients-console.log")" "Starting import of 3"
+}
+test_import_patients_decline_restart_changes_nothing() { _skip_no_tmux && return 0; _setup17
+  echo old-console > "$WORKDIR/tsrv/logs/import-patients-console.log"
+  _run17 $'n\n'; assert_eq 1 $rc "$out"
+  assert_eq old-console "$(cat "$WORKDIR/tsrv/logs/import-patients-console.log")"
+  [ -z "$(ls "$WORKDIR"/tsrv/logs/import-patients-console.2*.log 2>/dev/null)" ] || { echo "rotated"; exit 1; }
+  assert_not_contains "$(tmux ls 2>&1 || true)" "import-patients:"
+  touch "$WORKDIR/tsrv/logs/import-patients.done"
+  _run17 $'n\n'; assert_eq 0 $rc "$out"; assert_contains "$out" "Next: 18-copy-files.sh"
+  [ -e "$WORKDIR/tsrv/logs/import-patients.done" ] || { echo "marker removed"; exit 1; }
+}
+test_import_patients_ended_early_offers_restart() { _skip_no_tmux && return 0; _setup17
+  echo "docker: failed to start" > "$WORKDIR/tsrv/logs/import-patients-console.log"; touch "$WORKDIR/release"
+  _run17 $'y\ny\ny\ny\n'; assert_eq 0 $rc "$out"
+  assert_contains "$out" "did not finish"
+  assert_eq "docker: failed to start" "$(cat "$WORKDIR"/tsrv/logs/import-patients-console.2*.log)"
+  assert_contains "$out" "tmux session 'import-patients'"
 }

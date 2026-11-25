@@ -6,7 +6,8 @@
 # "import-patients" on the target, with the console output copied to
 # <TARGET_SERVER_DIR>/logs/import-patients-console.log. It does not wait: run it again to see progress
 # (successful/failed/left of the current patient pass, and the failure classes in the importer's app.log).
-# Run it once more after the import ended: it sets innodb_flush_log_at_trx_commit back to 1.
+# Run it once more after the import ended: it sets innodb_flush_log_at_trx_commit back to 1 and offers to start another
+# pass (it moves the previous console log aside). The failed patient files are moved back between the two patient passes.
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1091
@@ -52,27 +53,45 @@ if tmux_running tgt import-users; then
   exit 1
 fi
 
+# Start another pass (or the first one): called after the previous run's marker/console log were handled.
+restart_needed=0
 if run_on tgt "[ -f $q_done ]"; then
   echo "The patient import has finished (providers, both patient passes, relationships). Summary:"
   show_progress
   echo
-  echo "Setting innodb_flush_log_at_trx_commit back to 1 (it was set to 2 for the imports)."
-  tgt_sql_write "SET GLOBAL innodb_flush_log_at_trx_commit = 1"
+  flush=$(tgt_sql "SELECT @@innodb_flush_log_at_trx_commit")
+  if [ "$flush" != 1 ]; then
+    echo "Setting innodb_flush_log_at_trx_commit back to 1 (it was set to 2 for the imports)."
+    tgt_sql_write "SET GLOBAL innodb_flush_log_at_trx_commit = 1"
+  fi
   echo "innodb_flush_log_at_trx_commit is now: $(tgt_sql "SELECT @@innodb_flush_log_at_trx_commit")"
-  next_step "18-copy-files.sh" "innodb_flush_log_at_trx_commit is 1 above; look at the failed count and the failure classes"
-  exit 0
+  # Answering no here ends the step: nothing is changed.
+  if ! ( confirm "start another import pass (answer n if the import is done: the failed files are retried by the second patient pass; a new run moves the console log aside)" ); then
+    next_step "18-copy-files.sh" "innodb_flush_log_at_trx_commit is 1 above; look at the failed count and the failure classes"
+    exit 0
+  fi
+  restart_needed=1
+elif run_on tgt "[ -s $q_console ]"; then
+  echo "The session 'import-patients' is not running and the import did not finish (no finished marker; the console log exists). Summary so far:"
+  show_progress
+  echo "Read the console log ($TARGET_SERVER_DIR/logs/import-patients-console.log) for the cause. Files already imported are in exports/successful and are not read again."
+  confirm "start another import pass (the console log is moved aside)"
+  restart_needed=1
 fi
-
-if run_on tgt "[ -s $q_console ]"; then
-  echo "The session 'import-patients' is gone, but there is no finished marker, and the console log exists: the import ended early." >&2
-  show_progress >&2
-  echo "Read the console log ($TARGET_SERVER_DIR/logs/import-patients-console.log), fix the cause, move that log away and run this script again to start over (already imported files are in exports/successful and are skipped)." >&2
-  exit 1
+if [ "$restart_needed" = 1 ]; then
+  tgt_work_write "rm -f $q_done && { [ ! -f $q_console ] || mv $q_console $q_logs/import-patients-console.\$(date +%Y%m%d-%H%M%S).log; }"
+  # The restarted run needs the faster setting again.
+  if [ "$(tgt_sql "SELECT @@innodb_flush_log_at_trx_commit")" != 2 ]; then tgt_sql_write "SET GLOBAL innodb_flush_log_at_trx_commit = 2"; fi
 fi
 
 # $(id -u) and $(id -g) expand on the server (tmux runs the command there). The server dir is mounted at the same path so the host paths in the importer .env exist in the container.
 node_cmd() { printf '%s' "$TARGET_DOCKER run --rm --user \"\$(id -u):\$(id -g)\" -e HOME=/tmp --network host -v $q_dir:$q_dir -w $q_dir/repo/src $NODE_IMAGE node $1.js"; }
-chain="$(node_cmd importProviders) && $(node_cmd importPatients) && $(node_cmd importPatients) && $(node_cmd importRelationships)"
+# The importer reads <exports>/*_patient.json and moves failures to <exports>/failed: between the two patient passes the
+# failed patient files are copied to <TARGET_SERVER_DIR>/patients-failed-pass1 and moved back to <exports> (nothing to move is fine).
+q_exp=$(printf '%q' "$TARGET_SERVER_DIR/exports")
+q_pass1=$(printf '%q' "$TARGET_SERVER_DIR/patients-failed-pass1")
+retry_prep="{ mkdir -p $q_pass1; cp $q_exp/failed/*_patient.json $q_pass1/ 2>/dev/null; find $q_exp/failed -maxdepth 1 -name '*_patient.json' -exec mv -t $q_exp {} + 2>/dev/null; true; }"
+chain="$(node_cmd importProviders) && $(node_cmd importPatients) && $retry_prep && $(node_cmd importPatients) && $(node_cmd importRelationships)"
 start_in_tmux tgt import-patients work "mkdir -p $q_logs && rm -f $q_done && { $chain && touch $q_done; } 2>&1 | tee -a $q_console"
 
 echo "Started (it takes a long time; Ctrl-C is not needed, nothing waits). Run this script again to see progress, and once more after it ended."
