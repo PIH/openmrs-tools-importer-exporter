@@ -3,7 +3,7 @@
 test_example_has_every_setting_used() {
   # Every ALL-CAPS variable referenced in migration/*.sh must be a setting in the example,
   # except lib-internal / harness-only / shell names.
-  local excluded=" MIGRATION_LIB_DIR MIGRATION_UNDER_TEST MIGRATION_CONFIRM_INPUT MIGRATION_PROMPT_PW_FILE MIGRATION_ENV HOME PATH SECONDS LINENO BASH_SOURCE PWD BASH_REMATCH MYSQL_ROOT_PASSWORD "
+  local excluded=" MIGRATION_LIB_DIR MIGRATION_UNDER_TEST MIGRATION_CONFIRM_INPUT MIGRATION_PROMPT_PW_FILE SKIP_NPM_CI MIGRATION_ENV HOME PATH SECONDS LINENO BASH_SOURCE PWD BASH_REMATCH MYSQL_ROOT_PASSWORD "
   local name missing=""
   for name in $(grep -ohE '\$\{?[A-Z][A-Z0-9_]*' ./*.sh | tr -d '${' | sort -u); do
     case "$excluded" in *" $name "*) continue ;; esac

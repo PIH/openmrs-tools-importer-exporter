@@ -37,8 +37,8 @@ load_settings() {
     echo "Settings file not found: '${file}'. Pass it as the first argument or set MIGRATION_ENV (create one with 00-create-settings.sh)." >&2
     exit 2
   fi
-  if grep -Eq '^[[:space:]]*(export[[:space:]]+)?(MIGRATION_CONFIRM_INPUT|MIGRATION_UNDER_TEST|MIGRATION_PROMPT_PW_FILE)=' "$file"; then
-    echo "Settings file must not set MIGRATION_CONFIRM_INPUT, MIGRATION_UNDER_TEST or MIGRATION_PROMPT_PW_FILE (test-harness only)" >&2
+  if grep -Eq '^[[:space:]]*(export[[:space:]]+)?(MIGRATION_CONFIRM_INPUT|MIGRATION_UNDER_TEST|MIGRATION_PROMPT_PW_FILE|SKIP_NPM_CI)=' "$file"; then
+    echo "Settings file must not set MIGRATION_CONFIRM_INPUT, MIGRATION_UNDER_TEST, MIGRATION_PROMPT_PW_FILE or SKIP_NPM_CI (test-harness only)" >&2
     exit 2
   fi
   set -a

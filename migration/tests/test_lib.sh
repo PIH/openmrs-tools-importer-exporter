@@ -33,7 +33,7 @@ test_prompt_auth_asks_once_and_works_with_test_container() {
 }
 test_prompt_auth_wrong_password_fails() { echo nope >"$WORKDIR/pw"; export MIGRATION_PROMPT_PW_FILE="$WORKDIR/pw"; { cat tests/fixtures/test.env; echo SOURCE_MYSQL_AUTH=prompt; } >"$WORKDIR/p.env"; load_settings "$WORKDIR/p.env"; assert_exit 1 src_sql 'select 1'; }
 test_settings_file_cannot_enable_confirm_bypass() {
-  for v in MIGRATION_CONFIRM_INPUT MIGRATION_UNDER_TEST; do
+  for v in MIGRATION_CONFIRM_INPUT MIGRATION_UNDER_TEST MIGRATION_PROMPT_PW_FILE SKIP_NPM_CI; do
     { cat tests/fixtures/test.env; echo "$v=1"; } >"$WORKDIR/bad.env"
     assert_exit 2 bash -c 'source lib.sh; load_settings "$1"' _ "$WORKDIR/bad.env"
   done
