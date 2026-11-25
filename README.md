@@ -47,6 +47,10 @@ share them only through the site's usual channels (not Jira).
   time of the change, so a duplicate row after an invalid ZL EMR ID move has an empty `zlEmrId`. This replaces the
   free-text `invalid-identifiers.log`.
 - `source-data-fixes.csv` (export): the HAI-1306 source data fixes, see below.
+- `source-data-review.csv` (export): the HAI-1306 cases logged for review, the same ones as the warnings in `app.log`
+  ending in "(review)" or "left as it is". One row per case: `rule`, `patient` (uuid), `list`, `uuid` (of the visit,
+  encounter, order or obs), `outcome` (`changed`, `partly changed` or `left as it is`) and `details` (the warning).
+  A changed case also has its changes in `source-data-fixes.csv`.
 - `visits-before-birthdate.csv` (import): the HAI-1311 patients, see below.
 - `export-failed-patients.txt` (export, only if any failed) and the `export-metrics`/`import-metrics` files.
 
@@ -82,7 +86,8 @@ share them only through the site's usual channels (not Jira).
 - **Source data the target's validation rejects (HAI-1306).** The export corrects a few patterns that SSPE and HSN
   accepted but today's core rejects, one rule at a time. Each change is listed in the patient file under
   `sourceDataFixesHAI1306` and in `LOG_HOME/source-data-fixes.csv` (rule, patient, order, field, old and new
-  value); verification takes the changes into account. The code is in `src/services/sourceDataFixes.js`.
+  value); verification takes the changes into account. The cases logged for review are also listed in
+  `LOG_HOME/source-data-review.csv`. The code is in `src/services/sourceDataFixes.js`.
   - *Encounters after their visit's stop* (`FIX_VISIT_STOP_FOR_ENCOUNTERS`, on by default; `false` turns it off): a
     visit's stop is extended to an encounter dated after it, if the encounter is on the same day as the visit's stop
     and the extended visit wouldn't reach a later visit; other cases are logged for review and left as they are.
