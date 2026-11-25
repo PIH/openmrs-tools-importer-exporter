@@ -4,7 +4,8 @@
 //
 // Applied at export, to SOURCE exports only (verification's TARGET exports are left alone). Every change is
 // listed in the patient file under FIXES_KEY and appended to LOG_HOME/source-data-fixes.csv. Verification uses
-// the list to line the file up with what the target returns, and then drops it.
+// the list to line the file up with what the target returns, and then drops it. The cases logged for review
+// (changed with "(review)", or left as they are) are also appended to LOG_HOME/source-data-review.csv.
 //
 // The import posts each order with its dateStopped, so an order whose stop date is before its activation fails
 // with Order.error.dateActivatedAfterDiscontinuedDate. For a RENEW, htmlformentry (not core) set the previous
@@ -132,6 +133,17 @@ import { fetchData } from "./openmrsService.js";
 
 export const FIXES_KEY = 'sourceDataFixesHAI1306';
 const LOG_FILE = 'source-data-fixes.csv';
+const REVIEW_FILE = 'source-data-review.csv';
+
+// The cases logged for review (changed with "(review)", or left as they are), per patient record. Kept out of the
+// record so they aren't written to the patient file; logSourceDataFixes writes them to REVIEW_FILE.
+const reviews = new WeakMap();
+
+/** Logs a case for review in app.log and keeps it for REVIEW_FILE. outcome: changed, partly changed or left as it is. */
+function review(record, rule, list, uuid, outcome, message) {
+  logger.warn(`Patient ${record.patient.uuid}: ${message}`);
+  reviews.set(record, [...(reviews.get(record) ?? []), { rule, list, uuid, outcome, message }]);
+}
 
 export function isVisitStopForEncountersFixEnabled() {
   return config.FIX_VISIT_STOP_FOR_ENCOUNTERS !== 'false';
@@ -512,8 +524,10 @@ function fixVisitStopForEncounters(record, fixes) {
     const reachesLaterVisit = newStop && visits.some(v => v !== visit && toSecond(v.startDatetime) > start
       && toSecond(v.startDatetime) <= newStop);
     if (!latest || reachesLaterVisit || sameDay.length < after.length) {
-      logger.warn(`Patient ${record.patient.uuid}: visit ${visit.uuid} has ${after.length} encounter(s) after its stop`
-        + (latest && !reachesLaterVisit ? `; extended only over the ${sameDay.length} on the same day` : '; left as it is') + ' (review)');
+      const extended = latest && !reachesLaterVisit;
+      review(record, 'visitStopForEncounters', 'visits', visit.uuid, extended ? 'partly changed' : 'left as it is',
+        `visit ${visit.uuid} has ${after.length} encounter(s) after its stop`
+        + (extended ? `; extended only over the ${sameDay.length} on the same day` : '; left as it is') + ' (review)');
       increment('HAI-1306 encounters after their visit stop left for review', after.length - (latest && !reachesLaterVisit ? sameDay.length : 0));
     }
     if (!latest || reachesLaterVisit) {
@@ -540,7 +554,8 @@ function fixOrderBeforeEncounter(record, listName, fixes) {
     const laterThanNewStart = date => date && toSecond(date) < encounterTime;
     if (laterThanNewStart(order.dateStopped) || laterThanNewStart(order.autoExpireDate)
       || allOrders.some(o => o.previousOrder?.uuid === order.uuid && laterThanNewStart(o.dateActivated))) {
-      logger.warn(`Patient ${record.patient.uuid}: ${listName} ${order.uuid} starts before its encounter, but moving it would put it after its stop; left as it is`);
+      review(record, 'orderBeforeEncounter', listName, order.uuid, 'left as it is',
+        `${listName} ${order.uuid} starts before its encounter, but moving it would put it after its stop; left as it is`);
       increment('HAI-1306 orders before their encounter left as they are');
       continue;
     }
@@ -587,7 +602,8 @@ function fixOverlappingDrugOrders(record, fixes) {
     const renewedAfterLater = refs.length > 0 && refs.every(o => o.action === 'RENEW'
       && laterEnd && toSecond(o.dateActivated) >= laterEnd);
     if (refs.length > 0 && !renewedAfterLater) {
-      logger.warn(`Patient ${record.patient.uuid}: drug order ${earlier.uuid} overlaps ${later.uuid} for the same drug, but another order `
+      review(record, 'overlappingDrugOrders', 'drugOrders', earlier.uuid, 'left as it is',
+        `drug order ${earlier.uuid} overlaps ${later.uuid} for the same drug, but another order `
         + `(${[...new Set(refs.map(o => o.action))].join(', ')}) refers to it; left as it is`);
       increment('HAI-1306 overlapping drug orders left as they are');
       continue;
@@ -597,7 +613,8 @@ function fixOverlappingDrugOrders(record, fixes) {
       from: earlier.dateStopped, to: newStop });
     earlier.dateStopped = newStop;
     if (renewedAfterLater) {
-      logger.warn(`Patient ${record.patient.uuid}: drug order ${earlier.uuid} overlaps ${later.uuid} for the same drug and is renewed `
+      review(record, 'overlappingDrugOrders', 'drugOrders', earlier.uuid, 'changed',
+        `drug order ${earlier.uuid} overlaps ${later.uuid} for the same drug and is renewed `
         + 'after it ends; stopped before the later one anyway (review)');
       increment('HAI-1306 overlapping drug orders stopped before the next one (renewed later)');
     } else {
@@ -628,8 +645,8 @@ function fixZeroDoseMixtard(record, fixes) {
       }
       const expired = endedBeforeNow(order.dateStopped) || endedBeforeNow(order.autoExpireDate);
       if (order.drug?.uuid !== MIXTARD_DRUG_UUID || !(isVoided || order.voided || expired)) {
-        logger.warn(`Patient ${record.patient.uuid}: ${listName} ${order.uuid} has a dose of ${order.dose}, but it isn't`
-          + ' a voided or expired Mixtard order; left as it is');
+        review(record, 'zeroDoseMixtard', listName, order.uuid, 'left as it is',
+          `${listName} ${order.uuid} has a dose of ${order.dose}, but it isn't a voided or expired Mixtard order; left as it is`);
         increment('HAI-1306 zero-dose drug orders left as they are');
         continue;
       }
@@ -743,15 +760,18 @@ function fixVisitLocationOtherFacility(record, fixes) {
     if (onlyEncounter && visitLocation === facility && !within(encounterLocation, facility)) {
       log('encounters', encounter.uuid, 'location', encounterLocation, visitLocation);
       encounter.location = { ...encounter.location, uuid: visitLocation };
-      logger.warn(`Patient ${record.patient.uuid}: encounter ${encounter.uuid} was at another facility than its visit ${visit.uuid}; moved to the visit's location, the source facility (review)`);
+      review(record, 'visitLocationOtherFacility', 'encounters', encounter.uuid, 'changed',
+        `encounter ${encounter.uuid} was at another facility than its visit ${visit.uuid}; moved to the visit's location, the source facility (review)`);
       increment('HAI-1306 encounters at another facility than their visit moved to the visit\'s location');
     } else if (onlyEncounter && within(encounterLocation, facility) && visitLocation !== facility) {
       log('visits', visit.uuid, 'location', visitLocation, facility);
       visit.location = { ...visit.location, uuid: facility };
-      logger.warn(`Patient ${record.patient.uuid}: visit ${visit.uuid} was at another facility than its encounter ${encounter.uuid}; moved to the source facility (review)`);
+      review(record, 'visitLocationOtherFacility', 'visits', visit.uuid, 'changed',
+        `visit ${visit.uuid} was at another facility than its encounter ${encounter.uuid}; moved to the source facility (review)`);
       increment('HAI-1306 visits at another facility than their encounter moved to the source facility');
     } else {
-      logger.warn(`Patient ${record.patient.uuid}: encounter ${encounter.uuid} doesn't fit the location of its visit ${visit.uuid}; left as it is (review)`);
+      review(record, 'visitLocationOtherFacility', 'encounters', encounter.uuid, 'left as it is',
+        `encounter ${encounter.uuid} doesn't fit the location of its visit ${visit.uuid}; left as it is (review)`);
       increment('HAI-1306 encounters not at their visit\'s location left as they are');
     }
   }
@@ -768,7 +788,8 @@ function fixReturnDateInAdmissionLocation(record, fixes) {
         const text = member[MISFILED_TEXT_KEY];
         delete member[MISFILED_TEXT_KEY];
         if (!/^\d{4}-\d{2}-\d{2}$/.test(text ?? '')) {
-          logger.warn(`Patient ${record.patient.uuid}: admission location obs ${member.uuid} has no location and no date; left as it is`);
+          review(record, 'returnDateInAdmissionLocation', 'obs', member.uuid, 'left as it is',
+            `admission location obs ${member.uuid} has no location and no date; left as it is`);
           increment('HAI-1306 admission location obs without a location left as they are');
           continue;
         }
@@ -851,14 +872,19 @@ export function applySourceDataFixes(record) {
   return record;
 }
 
-/** Call once the patient file is written: appends the record's fixes to LOG_HOME/source-data-fixes.csv. */
+/**
+ * Call once the patient file is written: appends the record's fixes to LOG_HOME/source-data-fixes.csv, and the cases
+ * logged for review to LOG_HOME/source-data-review.csv.
+ */
 export function logSourceDataFixes(record) {
-  const fixes = record?.[FIXES_KEY];
-  if (!fixes?.length) {
-    return Promise.resolve();
-  }
-  return appendCsvRows(LOG_FILE, ['rule', 'patient', 'list', 'uuid', 'field', 'from', 'to'],
-    fixes.map(fix => [fix.rule, record.patient.uuid, fix.list, fix.uuid, fix.field, fix.from, fix.to]));
+  const fixes = record?.[FIXES_KEY] ?? [];
+  const toReview = (record && reviews.get(record)) ?? [];
+  return Promise.all([
+    appendCsvRows(LOG_FILE, ['rule', 'patient', 'list', 'uuid', 'field', 'from', 'to'],
+      fixes.map(fix => [fix.rule, record.patient.uuid, fix.list, fix.uuid, fix.field, fix.from, fix.to])),
+    appendCsvRows(REVIEW_FILE, ['rule', 'patient', 'list', 'uuid', 'outcome', 'details'],
+      toReview.map(r => [r.rule, record.patient.uuid, r.list, r.uuid, r.outcome, r.message])),
+  ]);
 }
 
 // A double-encoded HTML entity (&amp;lt;, &amp;gt;, &amp;quot;, &amp;amp;, &amp;#39; ...): text that was HTML-encoded

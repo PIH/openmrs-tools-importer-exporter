@@ -1,4 +1,4 @@
-// CSV report files in LOG_HOME (source-data-fixes.csv, visits-before-birthdate.csv, invalid-identifiers.csv)
+// CSV report files in LOG_HOME (source-data-fixes.csv, source-data-review.csv, visits-before-birthdate.csv, invalid-identifiers.csv)
 import fs from "fs/promises";
 import path from "path";
 import config from "./config.js";
