@@ -1,0 +1,24 @@
+# Tests for lib.sh. Run with tests/run.sh (cwd is migration/, lib.sh and test.env are loaded).
+
+test_require_settings_names_missing() { out=$( (FOO=; require_settings FOO) 2>&1 ); assert_eq 2 $?; assert_contains "$out" "FOO"; }
+test_run_on_local_runs_directly()    { assert_eq "hi" "$(run_on src 'echo hi')"; }
+test_src_sql_prints_sql_and_returns_rows() { out=$(src_sql "select 1+1" 2>&1); assert_contains "$out" "select 1+1"; assert_contains "$out" "2"; }
+test_confirm_no_exits_1()            { assert_exit 1 bash -c 'source lib.sh; confirm x </dev/null'; }   # no tty → treated as "no"
+test_test_mode_blocks_source_writes() { MIGRATION_MODE=test; assert_exit 3 src_sql_write "update users set retired=1"; assert_eq 0 "$(testdb.sh sql src_db 'select count(*) from users where retired=1')"; }
+test_test_mode_blocks_source_cmd_writes() { MIGRATION_MODE=test; assert_exit 3 src_cmd_write "touch $WORKDIR/should-not-exist"; [ ! -e "$WORKDIR/should-not-exist" ] || { echo "command ran"; exit 1; }; }
+test_test_mode_allows_target_writes() { MIGRATION_MODE=test; yes | tgt_sql_write "insert into global_property(property,property_value,uuid) values('t','v',uuid())" >/dev/null 2>&1; assert_eq 1 "$(testdb.sh sql tgt_db "select count(*) from global_property where property='t'")"; }
+test_test_mode_allows_work_writes()  { MIGRATION_MODE=test; yes | src_work_write "touch $WORKDIR/work-src" >/dev/null 2>&1; yes | tgt_work_write "touch $WORKDIR/work-tgt" >/dev/null 2>&1; [ -e "$WORKDIR/work-src" ] && [ -e "$WORKDIR/work-tgt" ] || { echo "work write did not run"; exit 1; }; }
+test_work_write_needs_confirmation() { MIGRATION_MODE=test; echo n | src_work_write "touch $WORKDIR/declined" >/dev/null 2>&1; assert_eq 1 $?; [ ! -e "$WORKDIR/declined" ] || { echo "ran despite no"; exit 1; }; }
+test_failed_sql_stops_script()       { out=$(bash -c 'source lib.sh; load_settings tests/fixtures/test.env; src_sql "select * from nope"; next_step 99-x.sh ok' 2>&1); assert_not_contains "$out" "99-x.sh"; assert_contains "$out" "FAILED in"; }
+test_log_never_contains_mysql_password() {
+  load_settings tests/fixtures/test.env; src_sql "select 1" >/dev/null
+  for _ in 1 2 3 4 5 6 7 8 9 10; do cat "$WORKDIR"/logs/*.log 2>/dev/null | grep -q 'select 1' && break; sleep 0.3; done
+  assert_contains "$(cat "$WORKDIR"/logs/*.log)" "select 1"
+  assert_not_contains "$(cat "$WORKDIR"/logs/*.log)" "pw-9f3k"
+}
+test_pipe_src_to_tgt_streams()       { assert_eq "abc" "$(pipe_src_to_tgt 'echo abc' 'cat')"; }
+test_pipe_src_to_tgt_fails_if_source_fails() { assert_exit 1 pipe_src_to_tgt 'exit 1' 'cat'; }
+test_sql_quote_escapes_quote()       { assert_eq "'O''Brien'" "$(sql_quote "O'Brien")"; assert_eq "'a\\\\b'" "$(sql_quote 'a\b')"; }
+test_wait_for_target_times_out()     { TARGET_WAIT_URL=http://127.0.0.1:9/ WAIT_TIMEOUT_SECONDS=1 assert_exit 1 wait_for_target; }
+test_skip_in_test_mode_exits_0()     { out=$( (MIGRATION_MODE=test; skip_in_test_mode "why"; echo after) 2>&1 ); assert_eq 0 $?; assert_contains "$out" "skipped in test mode: why"; assert_not_contains "$out" after; }
+test_tmux_refuses_duplicate_session() { s=hai1309-t$$; start_in_tmux src "$s" 'sleep 30'; tmux_running src "$s" || { echo "not running"; exit 1; }; assert_exit 1 start_in_tmux src "$s" 'sleep 30'; tmux kill-session -t "$s"; }
