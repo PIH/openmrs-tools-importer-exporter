@@ -145,3 +145,11 @@ test_special_characters_in_username() { _clear9
   _run9; assert_eq 0 $rc "$out"
   assert_contains "$(_map user_mappings.csv)" "$(_uid 1 1) o'x,$(_uid 1 5)"
 }
+test_two_source_users_same_email_conflict() { _clear9
+  _add9 src_db 1 alice a@x.org 0; _add9 src_db 2 alicia ' A@x.org' 0; _add9 tgt_db 5 other a@x.org 0
+  _run9; assert_eq 0 $rc "$out"
+  assert_eq 0 "$(wc -l < "$WORKDIR/mappings/user_mappings.csv" | tr -d ' ')"
+  c=$(_map review-email-conflicts.csv)
+  assert_contains "$c" "$(_uid 1 1),alice"; assert_contains "$c" "$(_uid 1 2),alicia"
+  assert_not_contains "$(_map unmatched-users.csv)" "$(_uid 1 1)"
+}
