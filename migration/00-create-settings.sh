@@ -24,7 +24,8 @@ while IFS= read -r line || [ -n "$line" ]; do
   case "$line" in
     '# '*) pending="${pending:+$pending$'\n'}${line#\# }" ;;
     [A-Z]*=*)
-      names+=("${line%%=*}"); defaults+=("${line#*=}"); comments+=("$pending"); pending="" ;;
+      d=${line#*=}; case "$d" in \"*\") d=${d#\"}; d=${d%\"} ;; esac
+      names+=("${line%%=*}"); defaults+=("$d"); comments+=("$pending"); pending="" ;;
     *) pending="" ;;
   esac
 done < "$example"

@@ -18,4 +18,4 @@ echo "Restart command: $SOURCE_RESTART_CMD"
 echo "Restarting drops every open session (and takes the source offline for a few minutes)."
 src_cmd_write "$SOURCE_RESTART_CMD"
 
-next_step "09-export-source.sh" "that the source OpenMRS is back up and nobody is logged in"
+next_step "09-build-user-mappings.sh" "that the source OpenMRS is back up and nobody is logged in"

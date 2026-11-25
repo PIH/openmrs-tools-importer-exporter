@@ -80,3 +80,5 @@ test_create_settings_rerun_keeps_defaults_that_reference_other_settings() {
   ./00-create-settings.sh "$WORKDIR/s.env" </dev/null >/dev/null 2>&1
   assert_contains "$(cat "$WORKDIR/s.env")" 'TARGET_RUNTIME_PROPERTIES="$TARGET_DATA_DIR/openmrs-runtime.properties"'
 }
+
+test_example_can_be_sourced() { bash -c 'set -e; source migration.env.example' >/dev/null 2>&1; assert_eq 0 $?; }

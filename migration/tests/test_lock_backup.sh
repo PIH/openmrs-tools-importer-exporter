@@ -60,7 +60,7 @@ test_backup_source_runs_each_command_confirmed() { rm -f "$WORKDIR/src.backup"; 
 }
 test_backup_target_runs_in_test_mode() { rm -f "$WORKDIR/tgt.backup"; _lenv
   out=$(printf 'y\ny\n' | ./06-backup-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
-  assert_eq "t1 t2" "$(tr '\n' ' ' < "$WORKDIR/tgt.backup" | sed 's/ $//')"; assert_contains "$out" "Next: 07-"
+  assert_eq "t1 t2" "$(tr '\n' ' ' < "$WORKDIR/tgt.backup" | sed 's/ $//')"; assert_contains "$out" "Next: 07-prepare-target.sh"
 }
 test_backup_declined_stops() { rm -f "$WORKDIR/tgt.backup"; _lenv
   out=$(printf 'n\n' | ./06-backup-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 1 $?; [ ! -e "$WORKDIR/tgt.backup" ] || exit 1
@@ -72,7 +72,7 @@ test_check_sessions_skipped_in_test_mode() { rm -f "$WORKDIR/restart.marker"; _l
 test_check_sessions_offers_restart() { rm -f "$WORKDIR/restart.marker"; _lenv MIGRATION_MODE=real
   out=$(printf 'y\n' | ./08-check-no-sessions.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
   assert_contains "$out" "retired"; [ -e "$WORKDIR/restart.marker" ] || { echo "no restart"; exit 1; }
-  assert_contains "$out" "Next: 09-"
+  assert_contains "$out" "Next: 09-build-user-mappings.sh"
 }
 test_check_sessions_restart_declined() { rm -f "$WORKDIR/restart.marker"; _lenv MIGRATION_MODE=real
   out=$(printf 'n\n' | ./08-check-no-sessions.sh "$WORKDIR/l.env" 2>&1); [ ! -e "$WORKDIR/restart.marker" ] || exit 1

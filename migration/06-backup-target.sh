@@ -16,4 +16,4 @@ for cmd in "${cmds[@]}"; do
   tgt_cmd_write "$cmd"
 done
 
-next_step "07-restart-target.sh" "that the backup files are on the target server and look the right size"
+next_step "07-prepare-target.sh" "that the backup files are on the target server and look the right size"
