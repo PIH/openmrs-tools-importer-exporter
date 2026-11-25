@@ -1,8 +1,8 @@
 #!/usr/bin/env bash
 # Step 15: import the users on the target server (HAI-1314).
 #   15-import-users.sh [settings-file]
-# Saves the uuids of the users that exist on the target before the import (needed by step 16), makes
-# sure per-table counts of the target are saved, sets innodb_flush_log_at_trx_commit = 2 for the
+# Saves the uuids of the users that exist on the target before the import (needed by step 16; needs the
+# counts step 13 saved), sets innodb_flush_log_at_trx_commit = 2 for the
 # import, and runs importUsers.js in a docker container in tmux session "import-users" on the target,
 # with the console output copied to <TARGET_SERVER_DIR>/logs/import-users-console.log. It waits for the
 # session to end and prints a summary. Run it again while the session is running to see progress
@@ -36,30 +36,33 @@ if tmux_running tgt import-users; then
   exit 0
 fi
 
+# Per-table and object counts of both databases: step 13 saves them before the first export.
+counts="$WORKDIR/counts"
+for f in source-before.txt target-before.txt target-tables-before.txt; do
+  if [ ! -f "$counts/$f" ]; then
+    echo "$counts/$f not found: run 13-export.sh first (it saves the counts before the export)." >&2
+    exit 2
+  fi
+done
+echo "Counts were already saved by step 13 in $counts (source-before.txt, target-before.txt, target-tables-before.txt)"
+
 # Users on the target before the first import: step 16 must not touch their passwords.
+# First line "# target=<host> db=<db>" says which target the list belongs to.
 before="$WORKDIR/target-users-before-import.txt"
+header="# target=$TARGET_HOST db=$TARGET_DB"
 if [ -f "$before" ]; then
+  if [ "$(head -n 1 "$before")" != "$header" ]; then
+    echo "$before is from another target (its first line is '$(head -n 1 "$before")', current settings say '$header')." >&2
+    echo "Move or delete it if it is stale, then run this script again." >&2
+    exit 2
+  fi
   echo "Keeping the existing $before (users that existed before the first import run; delete it only to start over)"
 else
-  tgt_sql "select uuid from users order by uuid" > "$before.part"
+  { printf '%s\n' "$header"; tgt_sql "select uuid from users order by uuid"; } > "$before.part"
   mv "$before.part" "$before"
-  echo "Saved $(wc -l < "$before" | tr -d ' ') target user uuids in $before (uuids only)"
+  echo "Saved $(grep -c -v '^#' "$before" | tr -d ' ') target user uuids in $before (uuids only)"
 fi
-
-# Per-table counts of the target (13 saves them before the first export; kept if present).
-counts="$WORKDIR/counts"
-mkdir -p "$counts"
-if [ -f "$counts/target-tables-before.txt" ]; then
-  echo "Per-table counts of the target were already saved by step 13: $counts/target-tables-before.txt"
-else
-  tables=$(tgt_sql "select table_name from information_schema.tables where table_schema = '$TARGET_DB' and table_type = 'BASE TABLE' order by table_name")
-  sql=""
-  for t in $tables; do sql="${sql}select '$t', count(*) from \`$t\` union all "; done
-  _dim "[target SQL] select '<table>', count(*) from <table> union all ... (one per table)"
-  _mysql_run tgt "${sql% union all }" > "$counts/target-tables-before.txt.part"
-  mv "$counts/target-tables-before.txt.part" "$counts/target-tables-before.txt"
-  echo "Saved per-table counts of the target in $counts/target-tables-before.txt"
-fi
+n_before=$(grep -c -v '^\(#\|$\)' "$before" || true)
 
 # Faster import: do not flush the InnoDB log at every commit. Reset it to 1 after step 17.
 flush=$(tgt_sql "SELECT @@innodb_flush_log_at_trx_commit")
@@ -87,7 +90,7 @@ show_progress
 errors=$(run_on tgt "grep -c -i 'error' $q_console 2>/dev/null; true")
 echo "Lines with 'error' in the console log: ${errors:-0}"
 total=$(tgt_sql "select count(*) from users")
-echo "Users on the target now: $total (before the import: $(wc -l < "$before" | tr -d ' '))"
+echo "Users on the target now: $total (before the import: $n_before)"
 echo "Users still waiting or failed? Fix the cause, then run this script again: run again until no new users are created (the users count above stops growing)."
 
 next_step "16-copy-password-hashes.sh" "run it now, before anyone can log in; first look at the 'failed' count above"

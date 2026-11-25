@@ -31,7 +31,8 @@ FAKE
   export TMUX_TMPDIR="$WORKDIR"
   trap '_cleanup13' EXIT
 }
-_cleanup13() { tmux kill-server >/dev/null 2>&1 || true; }
+# Only ever the private server under TMUX_TMPDIR, addressed by its socket (never a bare kill-server).
+_cleanup13() { tmux -S "$WORKDIR/tmux-$(id -u)/default" kill-server >/dev/null 2>&1 || true; }
 _wait_session() { local i; for i in $(seq 1 50); do tmux has-session -t =export 2>/dev/null && return 0; sleep 0.1; done; return 1; }
 _wait_gone() { local i; for i in $(seq 1 100); do tmux has-session -t =export 2>/dev/null || return 0; sleep 0.1; done; return 1; }
 _run13() { out=$(printf '%s' "$1" | ./13-export.sh "$WORKDIR/l.env" 2>&1); rc=$?; }

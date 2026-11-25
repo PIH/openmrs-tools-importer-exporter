@@ -8,6 +8,8 @@ export PATH="$HERE:$PATH"
 export WORKDIR; WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 # Harness-only (lib.sh ignores MIGRATION_CONFIRM_INPUT without MIGRATION_UNDER_TEST=1): confirm reads its answer from stdin instead of /dev/tty.
+# Tests start their own tmux servers under TMUX_TMPDIR; with TMUX set (suite run inside tmux) tmux would use the operator's server instead.
+unset TMUX TMUX_PANE
 export MIGRATION_UNDER_TEST=1
 export MIGRATION_CONFIRM_INPUT=/dev/stdin
 

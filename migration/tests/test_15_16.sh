@@ -20,7 +20,8 @@ _pwof() { testdb.sh sql tgt_db "select concat(ifnull(password,'NULL'),'/',ifnull
 _setup15() {
   local realdocker; realdocker=$(command -v docker)
   rm -rf "$WORKDIR/srv" "$WORKDIR/tsrv" "$WORKDIR/counts" "$WORKDIR/release" "$WORKDIR/docker.calls" "$WORKDIR/bin" "$WORKDIR/target-users-before-import.txt"
-  mkdir -p "$WORKDIR/bin" "$WORKDIR/tsrv/exports"
+  mkdir -p "$WORKDIR/bin" "$WORKDIR/tsrv/exports" "$WORKDIR/counts"
+  echo x > "$WORKDIR/counts/source-before.txt"; echo x > "$WORKDIR/counts/target-before.txt"; echo x > "$WORKDIR/counts/target-tables-before.txt"
   cat > "$WORKDIR/bin/docker" <<FAKE
 #!/bin/bash
 if [ "\$1" = run ]; then
@@ -41,14 +42,15 @@ FAKE
   trap '_cleanup15' EXIT
   _clear16; _user16 tgt_db 1 daemon NULL "$(_h 1 1)"; _user16 tgt_db 2 alice NULL "$(_h 1 2)"
 }
-_cleanup15() { tmux kill-server >/dev/null 2>&1 || true; testdb.sh sql tgt_db "set global innodb_flush_log_at_trx_commit = 1" >/dev/null 2>&1 || true; _clear16; }
+_cleanup15() { tmux -S "$WORKDIR/tmux-$(id -u)/default" kill-server >/dev/null 2>&1 || true; testdb.sh sql tgt_db "set global innodb_flush_log_at_trx_commit = 1" >/dev/null 2>&1 || true; _clear16; }
 _run15() { out=$(printf '%s' "$1" | ./15-import-users.sh "$WORKDIR/l.env" 2>&1); rc=$?; }
 
 test_import_users_saves_uuid_list_and_runs_node() { _skip_no_tmux && return 0; _setup15
   touch "$WORKDIR/release"
   _run15 $'y\ny\n'; assert_eq 0 $rc "$out"
-  assert_eq "$(printf '%s\n%s' "$(_h 1 1)" "$(_h 1 2)")" "$(sort "$WORKDIR/target-users-before-import.txt")"
-  assert_eq 2 "$(wc -l < "$WORKDIR/target-users-before-import.txt" | tr -d ' ')"
+  assert_eq "# target=local db=tgt_db" "$(head -n 1 "$WORKDIR/target-users-before-import.txt")"
+  assert_eq "$(printf '%s\n%s' "$(_h 1 1)" "$(_h 1 2)")" "$(tail -n +2 "$WORKDIR/target-users-before-import.txt" | sort)"
+  assert_eq 3 "$(wc -l < "$WORKDIR/target-users-before-import.txt" | tr -d ' ')"
   assert_contains "$out" "tmux session 'import-users'"
   assert_contains "$out" "-v $WORKDIR/tsrv:$WORKDIR/tsrv -w $WORKDIR/tsrv/repo/src mysql:5.6 node importUsers.js"
   assert_contains "$out" 'run --rm --user "$(id -u):$(id -g)" -e HOME=/tmp --network host'
@@ -59,19 +61,34 @@ test_import_users_saves_uuid_list_and_runs_node() { _skip_no_tmux && return 0; _
   assert_contains "$out" "Next: 16-copy-password-hashes.sh"; assert_contains "$out" "before anyone can log in"
 }
 test_import_users_keeps_existing_uuid_list() { _skip_no_tmux && return 0; _setup15
-  echo keepme > "$WORKDIR/target-users-before-import.txt"; touch "$WORKDIR/release"
+  printf '# target=local db=tgt_db\nkeepme\n' > "$WORKDIR/target-users-before-import.txt"; touch "$WORKDIR/release"
   _run15 $'y\ny\n'; assert_eq 0 $rc "$out"
-  assert_eq keepme "$(cat "$WORKDIR/target-users-before-import.txt")"
+  assert_eq keepme "$(tail -n 1 "$WORKDIR/target-users-before-import.txt")"
   assert_contains "$out" "Keeping the existing $WORKDIR/target-users-before-import.txt"
 }
-test_import_users_counts_reused_or_saved() { _skip_no_tmux && return 0; _setup15
-  mkdir -p "$WORKDIR/counts"; echo x > "$WORKDIR/counts/target-tables-before.txt"; touch "$WORKDIR/release"
+test_import_users_needs_counts_from_13() { _skip_no_tmux && return 0; _setup15
+  rm -f "$WORKDIR/counts/target-tables-before.txt"
+  _run15 $'y\ny\n'; assert_eq 2 $rc "$out"; assert_contains "$out" "run 13-export.sh first"
+  [ ! -e "$WORKDIR/target-users-before-import.txt" ] || { echo "list written before the check"; exit 1; }
+  _setup15; touch "$WORKDIR/release"
   _run15 $'y\ny\n'; assert_eq 0 $rc "$out"
-  assert_contains "$out" "already saved by step 13: $WORKDIR/counts/target-tables-before.txt"
-  assert_eq x "$(cat "$WORKDIR/counts/target-tables-before.txt")"
-  rm -f "$WORKDIR/target-users-before-import.txt" "$WORKDIR/counts/target-tables-before.txt" "$WORKDIR/tsrv/logs/import-users-console.log"
-  _run15 $'y\ny\n'; assert_eq 0 $rc "$out"
-  grep -qE "^users	[0-9]+\$" "$WORKDIR/counts/target-tables-before.txt" || { echo "table counts not saved"; exit 1; }
+  assert_contains "$out" "already saved by step 13 in $WORKDIR/counts"
+}
+test_import_users_refuses_list_from_other_target() { _skip_no_tmux && return 0; _setup15
+  printf '# target=otherhost db=tgt_db\nxx\n' > "$WORKDIR/target-users-before-import.txt"
+  _run15 $'y\ny\n'; assert_eq 2 $rc "$out"; assert_contains "$out" "is from another target"
+  assert_eq xx "$(tail -n 1 "$WORKDIR/target-users-before-import.txt")"
+  printf 'xx\n' > "$WORKDIR/target-users-before-import.txt"   # no header at all
+  _run15 $'y\ny\n'; assert_eq 2 $rc "$out"
+  assert_not_contains "$(tmux ls 2>&1 || true)" "import-users:"
+}
+test_cleanup_with_TMUX_set_leaves_other_servers_alone() { _skip_no_tmux && return 0
+  local sock="$WORKDIR/sentinel.sock"
+  tmux -S "$sock" new-session -d -s sentinel "sleep 60" || { echo "cannot start sentinel"; exit 1; }
+  export TMUX_TMPDIR="$WORKDIR"
+  ( export TMUX="$sock,1,0"; _cleanup15; _cleanup13 )
+  tmux -S "$sock" has-session -t =sentinel || { echo "cleanup killed a tmux server it does not own"; tmux -S "$sock" kill-server; exit 1; }
+  tmux -S "$sock" kill-server
 }
 test_flush_set_to_2_then_shown() { _skip_no_tmux && return 0; _setup15
   touch "$WORKDIR/release"
@@ -108,7 +125,7 @@ _seed16() { _clear16
   _user16 tgt_db 1 ann RANDOM-1 "$(_h 1 11)"; _user16 tgt_db 2 dan RANDOM-2 "$(_h 1 12)"
   _user16 tgt_db 3 bobt TARGETHASH-B "$(_h 1 23)"; _user16 tgt_db 4 daemon TARGETHASH-C "$(_h 1 14)"
   _user16 tgt_db 5 nopw RANDOM-5 "$(_h 1 15)"
-  printf '%s\n%s\n' "$(_h 1 23)" "$(_h 1 14)" > "$WORKDIR/target-users-before-import.txt"
+  printf '# target=local db=tgt_db\n%s\n\n%s\n' "$(_h 1 23)" "$(_h 1 14)" > "$WORKDIR/target-users-before-import.txt"
   cp tests/fixtures/test.env "$WORKDIR/l.env"
   trap '_clear16' EXIT
 }
@@ -146,6 +163,13 @@ test_hash_copy_nothing_written_to_workdir() { _seed16
 test_hash_copy_refuses_without_before_list() { _seed16
   rm -f "$WORKDIR/target-users-before-import.txt"
   _run16 $'y\n'; assert_eq 1 $rc "$out"; assert_contains "$out" "run 15-import-users.sh first"
+  assert_eq "RANDOM-1/SALT-1" "$(_pwof "$(_h 1 11)")"
+}
+test_hash_copy_refuses_list_without_or_with_wrong_header() { _seed16
+  printf '%s\n' "$(_h 1 23)" > "$WORKDIR/target-users-before-import.txt"
+  _run16 $'y\n'; assert_eq 2 $rc "$out"; assert_contains "$out" "belongs to another target"
+  printf '# target=elsewhere db=tgt_db\n%s\n' "$(_h 1 23)" > "$WORKDIR/target-users-before-import.txt"
+  _run16 $'y\n'; assert_eq 2 $rc "$out"
   assert_eq "RANDOM-1/SALT-1" "$(_pwof "$(_h 1 11)")"
 }
 test_hash_copy_not_confirmed_changes_nothing() { _seed16

@@ -21,7 +21,12 @@ if [ ! -f "$before" ]; then
   echo "$before not found: run 15-import-users.sh first (it saves the users that existed before the import)." >&2
   exit 1
 fi
-n_before=$(wc -l < "$before" | tr -d ' ')
+header="# target=$TARGET_HOST db=$TARGET_DB"
+if [ "$(head -n 1 "$before")" != "$header" ]; then
+  echo "$before is missing its first line '$header' or belongs to another target (found: '$(head -n 1 "$before")'). Run 15-import-users.sh for this target." >&2
+  exit 2
+fi
+n_before=$(grep -c -v '^\(#\|$\)' "$before" || true)
 
 # Source side: read-only query that prints the insert statements.
 src_gen="select concat('insert into tmp_hashes values (', quote(uuid), ',', quote(password), ',', quote(salt), ');') from users where password is not null"
@@ -45,7 +50,7 @@ confirm "update users.password and users.salt on the TARGET database for every i
 _wrap_for_target() {
   mysql_pw_line tgt
   printf '%s\n' "$head_sql"
-  awk '{ gsub(/\\/, "\\\\"); gsub(/\047/, "\047\047"); print "insert into tmp_before values (\047" $0 "\047);" }' "$before"
+  awk '/^#/ || /^[[:space:]]*$/ { next } { gsub(/\\/, "\\\\"); gsub(/\047/, "\047\047"); print "insert into tmp_before values (\047" $0 "\047);" }' "$before"
   cat
   printf '%s\n' "$update_sql"
 }
