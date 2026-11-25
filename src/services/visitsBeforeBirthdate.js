@@ -8,7 +8,7 @@
 // Import: for such a patient (using the same estimated-birthdate margin as the validator), after the patient is created (or found, on a rerun), set the target's birthdate to the
 // day of the earliest visit, import everything as usual, then put the source's birthdate (and whether it is
 // estimated) back. If the import fails part way, the patient keeps the temporary birthdate until a rerun puts it
-// back. Each patient is counted and listed (patient uuid and number of visits before the birthdate) in
+// back. Each patient is counted and listed (patient uuid, ZL EMR ID and number of visits before the birthdate) in
 // LOG_HOME/visits-before-birthdate.csv, so the sites can still correct them in ZL Central (HAI-1311). Note that
 // anyone who edits one of these visits later in ZL Central will get the validation error until the data is corrected.
 // The two birthdate updates record the import as a change of the patient (dateChanged and changedBy of the patient and
@@ -78,7 +78,14 @@ export async function restoreBirthdate(record) {
   await postData(`${CONSTANTS.TARGET.URLS.PERSON}/${record.patient.uuid}`,
     { birthdate: person.birthdate, birthdateEstimated: !!person.birthdateEstimated });
   increment('patients imported with visits before their birthdate (HAI-1311)');
-  await appendCsvRows(LOG_FILE, ['patient', 'visitsBeforeBirthdate'], [[record.patient.uuid, visits.length]]);
+  await appendCsvRows(LOG_FILE, ['patient', 'zlEmrId', 'visitsBeforeBirthdate'],
+    [[record.patient.uuid, zlEmrId(record.patient), visits.length]]);
+}
+
+// The patient's ZL EMR ID as exported. If the import moved an invalid one to the invalid identifier type, that one.
+function zlEmrId(patient) {
+  const ofType = (typeUuid) => patient.identifiers?.find((i) => i.identifierType?.uuid === typeUuid)?.identifier;
+  return ofType(config.EMR_PATIENT_IDENTIFIER_TYPE_UUID) ?? ofType(config.INVALID_IDENTIFIER_TYPE_UUID) ?? '';
 }
 
 let normalized = 0;
