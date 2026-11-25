@@ -136,3 +136,21 @@ test_missing_mapping_file_stops() { _setup12
   rm "$WORKDIR/mappings/user_mappings.csv"
   _run12; assert_eq 2 $rc "$out"; assert_contains "$out" "user_mappings.csv"
 }
+test_unwritable_password_stops_before_any_change() { _setup12
+  local bad
+  for bad in "a'b\"c\`d" "line$(printf '\r')"; do
+    rm -rf "$WORKDIR/srv" "$WORKDIR/tsrv"; printf '%s\ntgt\n' "$bad" > "$WORKDIR/pw"
+    _run12; assert_eq 2 $rc "$out"
+    [ ! -e "$WORKDIR/srv" ] && [ ! -e "$WORKDIR/tsrv" ] || { echo "something was written before stopping"; exit 1; }
+  done
+  printf 'src\n%s\n' "a'b\"c\`d" > "$WORKDIR/pw"; rm -rf "$WORKDIR/srv" "$WORKDIR/tsrv"
+  _run12; assert_eq 2 $rc "$out"; [ ! -e "$WORKDIR/srv" ] || { echo "source changed before the target password was checked"; exit 1; }
+}
+test_unwritable_setting_value_stops_before_any_change() { _setup12
+  cat >> "$WORKDIR/l.env" <<'ENVEOF'
+ORDER_NUMBER_PREFIX="a'b\"c\`d"
+ENVEOF
+  rm -rf "$WORKDIR/srv" "$WORKDIR/tsrv"
+  _run12; assert_eq 2 $rc "$out"; assert_contains "$out" "ORDER_NUMBER_PREFIX"
+  [ ! -e "$WORKDIR/srv" ] || { echo "something was written before stopping"; exit 1; }
+}

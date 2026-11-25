@@ -55,47 +55,51 @@ _ask_pw() {
 }
 
 # _dq VALUE: VALUE as a dotenv value: bare if it only has safe characters, else quoted with whichever
-# of ' " ` it does not contain.
+# of ' " ` it does not contain. Returns 2 (with a message) for a value that can't be written.
 _dq() {
   local v=$1
-  case "$v" in *$'\n'*|*$'\r'*) echo "A value with a line break can't go in a .env file" >&2; exit 2 ;; esac
+  case "$v" in *$'\n'*|*$'\r'*) echo "A value with a line break can't go in a .env file" >&2; return 2 ;; esac
   if [[ $v =~ ^[A-Za-z0-9_./:@%+=,-]+$ ]]; then printf '%s' "$v"
   elif [[ $v != *"'"* ]]; then printf "'%s'" "$v"
   elif [[ $v != *'"'* ]]; then printf '"%s"' "$v"
   elif [[ $v != *'`'* ]]; then printf '`%s`' "$v"
-  else echo "A value containing ', \" and \` can't go in a .env file" >&2; exit 2; fi
+  else echo "A value containing ', \" and \` can't go in a .env file" >&2; return 2; fi
 }
 
+# _kv NAME VALUE: prints NAME=<value as dotenv>; returns 2 if the value can't be written (the caller must stop).
+_kv() { local q; q=$(_dq "$2") || { echo "  (for $1)" >&2; return 2; }; printf '%s=%s\n' "$1" "$q"; }
+
 # _env_text side show_pw: the .env content for that side; the password is *** unless show_pw is 1.
+# Returns non-zero if any value can't be written; capture it with `text=$(_env_text ...) || exit 2`.
 _env_text() {
   local side=$1 show=$2 dir pw s
   if [ "$side" = src ]; then
     dir=$SOURCE_SERVER_DIR; pw=$src_pw
-    echo "OPENMRS_SOURCE_CONTEXT_PATH=$(_dq "$SOURCE_OPENMRS_URL")"
-    echo "OPENMRS_SOURCE_USERNAME=$(_dq "$MIGRATING_USERNAME")"
-    if [ "$show" = 1 ]; then echo "OPENMRS_SOURCE_PASSWORD=$(_dq "$pw")"; else echo "OPENMRS_SOURCE_PASSWORD=***"; fi
-    echo "TARGET_DIR=$(_dq "$dir/exports")"
-    echo "LOG_HOME=$(_dq "$dir/logs")"
-    echo "ORDER_NUMBER_PREFIX=$(_dq "$ORDER_NUMBER_PREFIX")"
-    echo "OPENMRS_SOURCE_FACILITY_UUID=$(_dq "$SOURCE_FACILITY_UUID")"
-    echo "EXPORT_USER_LIST_FILE=$(_dq "$dir/lists/users.csv")"
-    echo "EXPORT_PROVIDER_LIST_FILE=$(_dq "$dir/lists/providers.csv")"
-    echo "EXPORT_PATIENT_LIST_FILE=$(_dq "$dir/lists/patients.csv")"
-    echo "EXPORT_RELATIONSHIP_LIST_FILE=$(_dq "$dir/lists/relationships.csv")"
+    _kv OPENMRS_SOURCE_CONTEXT_PATH "$SOURCE_OPENMRS_URL" || return 2
+    _kv OPENMRS_SOURCE_USERNAME "$MIGRATING_USERNAME" || return 2
+    if [ "$show" = 1 ]; then _kv OPENMRS_SOURCE_PASSWORD "$pw" || return 2; else echo "OPENMRS_SOURCE_PASSWORD=***"; fi
+    _kv TARGET_DIR "$dir/exports" || return 2
+    _kv LOG_HOME "$dir/logs" || return 2
+    _kv ORDER_NUMBER_PREFIX "$ORDER_NUMBER_PREFIX" || return 2
+    _kv OPENMRS_SOURCE_FACILITY_UUID "$SOURCE_FACILITY_UUID" || return 2
+    _kv EXPORT_USER_LIST_FILE "$dir/lists/users.csv" || return 2
+    _kv EXPORT_PROVIDER_LIST_FILE "$dir/lists/providers.csv" || return 2
+    _kv EXPORT_PATIENT_LIST_FILE "$dir/lists/patients.csv" || return 2
+    _kv EXPORT_RELATIONSHIP_LIST_FILE "$dir/lists/relationships.csv" || return 2
   else
     dir=$TARGET_SERVER_DIR; pw=$tgt_pw
-    echo "OPENMRS_TARGET_CONTEXT_PATH=$(_dq "$TARGET_OPENMRS_URL")"
-    echo "OPENMRS_TARGET_USERNAME=$(_dq "$MIGRATING_USERNAME")"
-    if [ "$show" = 1 ]; then echo "OPENMRS_TARGET_PASSWORD=$(_dq "$pw")"; else echo "OPENMRS_TARGET_PASSWORD=***"; fi
-    echo "TARGET_DIR=$(_dq "$dir/exports")"
-    echo "LOG_HOME=$(_dq "$dir/logs")"
-    echo "OPENMRS_SOURCE_FACILITY_UUID=$(_dq "$SOURCE_FACILITY_UUID")"
-    echo "OPENMRS_HEALTH_CENTER_ATTRIBUTE_UUID=$(_dq "$HEALTH_CENTER_ATTRIBUTE_TYPE_UUID")"
-    echo "IMPORT_PATIENTS_BATCH_SIZE=$(_dq "$IMPORT_PATIENTS_BATCH_SIZE")"
-    echo "EXPORT_USER_MAPPINGS_FILE=$(_dq "$dir/mappings/user_mappings.csv")"
-    echo "EXPORT_PROVIDER_MAPPINGS_FILE=$(_dq "$dir/mappings/provider_mappings.csv")"
+    _kv OPENMRS_TARGET_CONTEXT_PATH "$TARGET_OPENMRS_URL" || return 2
+    _kv OPENMRS_TARGET_USERNAME "$MIGRATING_USERNAME" || return 2
+    if [ "$show" = 1 ]; then _kv OPENMRS_TARGET_PASSWORD "$pw" || return 2; else echo "OPENMRS_TARGET_PASSWORD=***"; fi
+    _kv TARGET_DIR "$dir/exports" || return 2
+    _kv LOG_HOME "$dir/logs" || return 2
+    _kv OPENMRS_SOURCE_FACILITY_UUID "$SOURCE_FACILITY_UUID" || return 2
+    _kv OPENMRS_HEALTH_CENTER_ATTRIBUTE_UUID "$HEALTH_CENTER_ATTRIBUTE_TYPE_UUID" || return 2
+    _kv IMPORT_PATIENTS_BATCH_SIZE "$IMPORT_PATIENTS_BATCH_SIZE" || return 2
+    _kv EXPORT_USER_MAPPINGS_FILE "$dir/mappings/user_mappings.csv" || return 2
+    _kv EXPORT_PROVIDER_MAPPINGS_FILE "$dir/mappings/provider_mappings.csv" || return 2
     for s in $optional_map_settings; do
-      [ -z "${!s:-}" ] || echo "$s=$(_dq "$dir/mappings/$(basename "${!s}")")"
+      [ -z "${!s:-}" ] || _kv "$s" "$dir/mappings/$(basename "${!s}")" || return 2
     done
   fi
 }
@@ -110,7 +114,7 @@ _put() {
 }
 
 _setup() {
-  local side=$1 label dir docker repo qdir qrepo qurl qref s f
+  local side=$1 label dir docker repo qdir qrepo qurl qref s f env_text
   if [ "$side" = src ]; then label=source; dir=$SOURCE_SERVER_DIR; docker=$SOURCE_DOCKER; else label=target; dir=$TARGET_SERVER_DIR; docker=$TARGET_DOCKER; fi
   repo="$dir/repo"
   qdir=$(printf '%q' "$dir"); qrepo=$(printf '%q' "$repo"); qurl=$(printf '%q' "$REPO_URL"); qref=$(printf '%q' "$REPO_REF")
@@ -140,12 +144,20 @@ _setup() {
     done
   fi
 
-  _ask_pw "$side"
   echo "The $label .env (passwords hidden):"
-  _env_text "$side" 0 | sed 's/^/    /'
+  if [ "$side" = src ]; then printf '%s\n' "$src_env_masked" | sed 's/^/    /'; env_text=$src_env; else printf '%s\n' "$tgt_env_masked" | sed 's/^/    /'; env_text=$tgt_env; fi
   # Content goes over stdin only: never on a command line. umask 077 so it is never readable by others.
-  _env_text "$side" 1 | _work "$side" "umask 077 && cat > $qrepo/src/.env && chmod 600 $qrepo/src/.env"
+  printf '%s\n' "$env_text" | _work "$side" "umask 077 && cat > $qrepo/src/.env && chmod 600 $qrepo/src/.env"
 }
+
+# Passwords and the complete .env texts first: a value that can't be written stops everything here,
+# before any change on a server.
+_ask_pw src
+_ask_pw tgt
+src_env=$(_env_text src 1) || exit 2
+tgt_env=$(_env_text tgt 1) || exit 2
+src_env_masked=$(_env_text src 0) || exit 2
+tgt_env_masked=$(_env_text tgt 0) || exit 2
 
 _setup src
 _setup tgt
