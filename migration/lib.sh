@@ -142,6 +142,17 @@ confirm() {
   exit 1
 }
 
+# ask "prompt": prints the prompt, reads one line and prints it on stdout (for retyping a value).
+# Same input source and harness-only rule as confirm.
+ask() {
+  local ans="" in=/dev/tty
+  printf '%s ' "$1" >&2
+  [ "${MIGRATION_UNDER_TEST:-}" = 1 ] && in=${MIGRATION_CONFIRM_INPUT:-/dev/tty}
+  read -r ans 2>/dev/null <"$in" || true
+  echo >&2
+  printf '%s\n' "$ans"
+}
+
 _refuse_in_test_mode() {
   if [ "${MIGRATION_MODE:-}" = test ]; then
     echo "Refused in test mode: $1 on the $2 server" >&2
