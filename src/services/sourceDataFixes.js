@@ -4,8 +4,9 @@
 //
 // Applied at export, to SOURCE exports only (verification's TARGET exports are left alone). Every change is
 // listed in the patient file under FIXES_KEY and appended to LOG_HOME/source-data-fixes.csv. Verification uses
-// the list to line the file up with what the target returns, and then drops it. The cases logged for review
-// (changed with "(review)", or left as they are) are also appended to LOG_HOME/source-data-review.csv.
+// the list to line the file up with what the target returns, and then drops it. A change that should still be
+// checked (logged with "(review)") has the warning in that CSV's review column; the cases left as they are for
+// review go to LOG_HOME/source-data-review.csv instead, so each case is in one of the two files.
 //
 // The import posts each order with its dateStopped, so an order whose stop date is before its activation fails
 // with Order.error.dateActivatedAfterDiscontinuedDate. For a RENEW, htmlformentry (not core) set the previous
@@ -136,10 +137,11 @@ const LOG_FILE = 'source-data-fixes.csv';
 const REVIEW_FILE = 'source-data-review.csv';
 
 // The cases logged for review (changed with "(review)", or left as they are), per patient record. Kept out of the
-// record so they aren't written to the patient file; logSourceDataFixes writes them to REVIEW_FILE.
+// record so they aren't written to the patient file; logSourceDataFixes writes the changed ones to the review column
+// of LOG_FILE and the ones left as they are to REVIEW_FILE.
 const reviews = new WeakMap();
 
-/** Logs a case for review in app.log and keeps it for REVIEW_FILE. outcome: changed, partly changed or left as it is. */
+/** Logs a case for review in app.log and keeps it for the CSVs. outcome: changed, partly changed or left as it is. */
 function review(record, rule, list, uuid, outcome, message) {
   logger.warn(`Patient ${record.patient.uuid}: ${message}`);
   reviews.set(record, [...(reviews.get(record) ?? []), { rule, list, uuid, outcome, message }]);
@@ -525,9 +527,11 @@ function fixVisitStopForEncounters(record, fixes) {
       && toSecond(v.startDatetime) <= newStop);
     if (!latest || reachesLaterVisit || sameDay.length < after.length) {
       const extended = latest && !reachesLaterVisit;
+      const leftOut = after.filter(e => !sameDay.includes(e)).map(e => e.uuid).join(' ');
       review(record, 'visitStopForEncounters', 'visits', visit.uuid, extended ? 'partly changed' : 'left as it is',
         `visit ${visit.uuid} has ${after.length} encounter(s) after its stop`
-        + (extended ? `; extended only over the ${sameDay.length} on the same day` : '; left as it is') + ' (review)');
+        + (extended ? `; extended only over the ${sameDay.length} on the same day, still after it: ${leftOut}` : '; left as it is')
+        + ' (review)');
       increment('HAI-1306 encounters after their visit stop left for review', after.length - (latest && !reachesLaterVisit ? sameDay.length : 0));
     }
     if (!latest || reachesLaterVisit) {
@@ -873,17 +877,30 @@ export function applySourceDataFixes(record) {
 }
 
 /**
- * Call once the patient file is written: appends the record's fixes to LOG_HOME/source-data-fixes.csv, and the cases
- * logged for review to LOG_HOME/source-data-review.csv.
+ * Call once the patient file is written: appends the record's fixes to LOG_HOME/source-data-fixes.csv, with the
+ * review warning of a changed case in its review column, and the cases left as they are for review to
+ * LOG_HOME/source-data-review.csv. A changed case whose change can't be found (not expected) goes to the review file.
  */
 export function logSourceDataFixes(record) {
   const fixes = record?.[FIXES_KEY] ?? [];
   const toReview = (record && reviews.get(record)) ?? [];
+  const key = (item) => `${item.rule}|${item.list}|${item.uuid}`;
+  const fixKeys = new Set(fixes.map(key));
+  const notes = new Map();
+  const leftAsTheyAre = [];
+  for (const r of toReview) {
+    if (r.outcome !== 'left as it is' && fixKeys.has(key(r))) {
+      notes.set(key(r), [...(notes.get(key(r)) ?? []), r.message]);
+    } else {
+      leftAsTheyAre.push(r);
+    }
+  }
   return Promise.all([
-    appendCsvRows(LOG_FILE, ['rule', 'patient', 'list', 'uuid', 'field', 'from', 'to'],
-      fixes.map(fix => [fix.rule, record.patient.uuid, fix.list, fix.uuid, fix.field, fix.from, fix.to])),
-    appendCsvRows(REVIEW_FILE, ['rule', 'patient', 'list', 'uuid', 'outcome', 'details'],
-      toReview.map(r => [r.rule, record.patient.uuid, r.list, r.uuid, r.outcome, r.message])),
+    appendCsvRows(LOG_FILE, ['rule', 'patient', 'list', 'uuid', 'field', 'from', 'to', 'review'],
+      fixes.map(fix => [fix.rule, record.patient.uuid, fix.list, fix.uuid, fix.field, fix.from, fix.to,
+        (notes.get(key(fix)) ?? []).join('; ')])),
+    appendCsvRows(REVIEW_FILE, ['rule', 'patient', 'list', 'uuid', 'details'],
+      leftAsTheyAre.map(r => [r.rule, record.patient.uuid, r.list, r.uuid, r.message])),
   ]);
 }
 

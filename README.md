@@ -35,9 +35,11 @@ they are (HAI-1316).
 
 ## Reports in LOG_HOME
 
-Besides `app.log`, the export and import write these reports to `LOG_HOME`. They hold patient identifiers, so
-share them only through the site's usual channels (not Jira).
+The scripts write these files to `LOG_HOME`. They hold patient identifiers, so share them only through the site's
+usual channels (not Jira).
 
+- `app.log` (every script): the log. Besides errors and warnings it has one line for each voided order or encounter
+  the import voids again on the target (HAI-1305, HAI-1306, see below).
 - `invalid-identifiers.csv` (import): every patient identifier the import had to change for the target to accept
   the patient, for the site team to clean up. One row per change: `change`, `patient` (uuid), `zlEmrId`,
   `dossierNumber`, `identifierType`, `identifier`, `newIdentifierType`, `newIdentifier`. The changes are
@@ -46,13 +48,19 @@ share them only through the site's usual channels (not Jira).
   the target gets the prefix `DPL-`). The ZL EMR ID and dossier number columns show the patient's values at the
   time of the change, so a duplicate row after an invalid ZL EMR ID move has an empty `zlEmrId`. This replaces the
   free-text `invalid-identifiers.log`.
-- `source-data-fixes.csv` (export): the HAI-1306 source data fixes, see below.
-- `source-data-review.csv` (export): the HAI-1306 cases logged for review, the same ones as the warnings in `app.log`
-  ending in "(review)" or "left as it is". One row per case: `rule`, `patient` (uuid), `list`, `uuid` (of the visit,
-  encounter, order or obs), `outcome` (`changed`, `partly changed` or `left as it is`) and `details` (the warning).
-  A changed case also has its changes in `source-data-fixes.csv`.
+- `source-data-fixes.csv` (export): every HAI-1306 source data fix (see below), one row per changed field: `rule`,
+  `patient` (uuid), `list`, `uuid` (of the visit, encounter, order or obs), `field`, `from`, `to` and `review`. The
+  `review` column holds the warning for a change that should still be checked (the warnings in `app.log` ending in
+  "(review)"), and is empty otherwise.
+- `source-data-review.csv` (export): the HAI-1306 cases left as they are for review, nothing changed (the warnings
+  in `app.log` ending in "left as it is" or "left as they are"). One row per case: `rule`, `patient` (uuid), `list`,
+  `uuid` and `details` (the warning). A case is in one of the two files, never both.
 - `visits-before-birthdate.csv` (import): the HAI-1311 patients, see below.
-- `export-failed-patients.txt` (export, only if any failed) and the `export-metrics`/`import-metrics` files.
+- `verify-users.csv` (`verifyUsers.js`): the imported users that are missing on the target or whose
+  `allowedVisitLocations` don't give them the source facility (or list a location twice, or one that isn't a visit
+  location).
+- `export-failed-patients.txt` (export, only if any patient failed).
+- `export-metrics-<time>.json` and `import-metrics-<time>.json`: counts and request timings, no identifiers.
 
 
 
@@ -87,8 +95,9 @@ share them only through the site's usual channels (not Jira).
 - **Source data the target's validation rejects (HAI-1306).** The export corrects a few patterns that SSPE and HSN
   accepted but today's core rejects, one rule at a time. Each change is listed in the patient file under
   `sourceDataFixesHAI1306` and in `LOG_HOME/source-data-fixes.csv` (rule, patient, order, field, old and new
-  value); verification takes the changes into account. The cases logged for review are also listed in
-  `LOG_HOME/source-data-review.csv`. The code is in `src/services/sourceDataFixes.js`.
+  value, and a review note for a change that should still be checked); verification takes the changes into account.
+  The cases left as they are for review are listed in `LOG_HOME/source-data-review.csv`. The code is in
+  `src/services/sourceDataFixes.js`.
   - *Encounters after their visit's stop* (`FIX_VISIT_STOP_FOR_ENCOUNTERS`, on by default; `false` turns it off): a
     visit's stop is extended to an encounter dated after it, if the encounter is on the same day as the visit's stop
     and the extended visit wouldn't reach a later visit; other cases are logged for review and left as they are.
