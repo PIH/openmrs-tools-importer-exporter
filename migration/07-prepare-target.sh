@@ -38,18 +38,19 @@ fi
 
 # 2. Switch off hibernate search indexing listeners (the index is rebuilt in step 20).
 echo "--- Part 2: indexing property in $TARGET_RUNTIME_PROPERTIES"
+sudo_prefix=${TARGET_FILE_SUDO:-}
 prop=hibernate.search.indexing.listeners.enabled=false
 q() { printf "'%s'" "$1"; }
 file=$(q "$TARGET_RUNTIME_PROPERTIES")
 echo "NOTE: puppet manages this file and may overwrite the change; if the server is reconfigured by puppet before the migration ends, check the line is still there."
 echo "NOTE: while it is off, nothing is indexed for search; step 20 rebuilds the index."
-if run_on tgt "grep -qxF $(q "$prop") $file"; then
+if run_on tgt "$sudo_prefix grep -qxF $(q "$prop") $file"; then
   echo "$prop is already in the file, nothing to write."
-elif run_on tgt "grep -q '^hibernate.search.indexing.listeners.enabled=' $file"; then
+elif run_on tgt "$sudo_prefix grep -q '^hibernate.search.indexing.listeners.enabled=' $file"; then
   echo "The file has hibernate.search.indexing.listeners.enabled with another value; fix it by hand, then re-run." >&2
   exit 2
 else
-  tgt_cmd_write "{ [ -z \"\$(tail -c1 $file)\" ] || echo; echo $(q "$prop"); } >> $file"
+  tgt_cmd_write "{ [ -z \"\$($sudo_prefix tail -c1 $file)\" ] || echo; echo $(q "$prop"); } | $sudo_prefix tee -a $file >/dev/null"
 fi
 
 # 3. Restart so the property takes effect, then wait until OpenMRS answers.

@@ -53,3 +53,8 @@ test_wait_url_timeout_fails() { _seed_seq 500 500; _penv; rm -f "$WORKDIR/up"
   [ "$rc" -ne 0 ] || { echo "expected failure: $out"; exit 1; }
   assert_contains "$out" "Timed out"; assert_not_contains "$out" "Next: 08"
 }
+test_runtime_properties_use_file_sudo_prefix() { _seed_seq 500 500; _penv; _l7env TARGET_FILE_SUDO=env
+  out=$(printf 'y\ny\ny\n' | ./07-prepare-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
+  assert_contains "$out" "env tee -a"; assert_contains "$out" "env tail -c1"
+  assert_eq 1 "$(grep -c '^hibernate.search.indexing.listeners.enabled=false$' "$WORKDIR/openmrs-runtime.properties")"
+}
