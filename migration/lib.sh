@@ -85,12 +85,13 @@ _load_mysql_pw() {
   printf -v "$var" '%s' "$pw"
 }
 
-# _mysql_run side SQL: runs SQL with the mysql client inside the container. -N -B tab output.
-# The password never appears on a command line or in a log: container-env reads the
-# container's own MYSQL_ROOT_PASSWORD; prompt sends the typed one as the first stdin line,
+# mysql_cmd side [MYSQL_FLAGS]: prints the remote command (to give to run_on) that runs the mysql
+# client inside the container, reading SQL from stdin (-N -B plus MYSQL_FLAGS). The password never
+# appears on a command line or in a log: container-env reads the container's own
+# MYSQL_ROOT_PASSWORD; prompt expects the typed one as the first stdin line (see mysql_input),
 # read inside the container (no -e, no host env var, so it also works with "sudo docker").
-_mysql_run() {
-  local side=$1 sql=$2 docker container db auth
+mysql_cmd() {
+  local side=$1 flags=${2:-} docker container db auth
   if [ "$side" = src ]; then
     docker=$SOURCE_DOCKER; container=${SOURCE_MYSQL_CONTAINER:?SOURCE_MYSQL_CONTAINER not set}; db=${SOURCE_DB:?SOURCE_DB not set}; auth=$SOURCE_MYSQL_AUTH
   else
@@ -98,13 +99,29 @@ _mysql_run() {
   fi
   case "$auth" in
     container-env)
-      run_on "$side" "$docker exec -i $container sh -c 'MYSQL_PWD=\"\$MYSQL_ROOT_PASSWORD\" exec mysql -uroot -N -B \"\$0\"' $db" < <(printf '%s\n' "$sql") ;;
+      printf '%s' "$docker exec -i $container sh -c 'MYSQL_PWD=\"\$MYSQL_ROOT_PASSWORD\" exec mysql -uroot -N -B $flags \"\$0\"' $db" ;;
     prompt)
-      _load_mysql_pw "$side"
-      local pw=_SRC_PW; [ "$side" = tgt ] && pw=_TGT_PW
-      run_on "$side" "$docker exec -i $container sh -c 'IFS= read -r MYSQL_PWD; export MYSQL_PWD; exec mysql -uroot -N -B \"\$0\"' $db" < <(printf '%s\n%s\n' "${!pw}" "$sql") ;;
+      printf '%s' "$docker exec -i $container sh -c 'IFS= read -r MYSQL_PWD; export MYSQL_PWD; exec mysql -uroot -N -B $flags \"\$0\"' $db" ;;
     *) echo "Unknown MYSQL_AUTH '$auth' for the $side server (use container-env or prompt)" >&2; return 2 ;;
   esac
+}
+
+# mysql_pw_line side: prints the first stdin line the mysql_cmd needs: the typed password for
+# prompt auth, nothing for container-env. Call it without $(...) only if the password is not loaded yet.
+mysql_pw_line() {
+  local side=$1 auth=$SOURCE_MYSQL_AUTH pw=_SRC_PW
+  [ "$side" = tgt ] && { auth=$TARGET_MYSQL_AUTH; pw=_TGT_PW; }
+  if [ "$auth" = prompt ]; then _load_mysql_pw "$side"; printf '%s\n' "${!pw}"; fi
+}
+
+# mysql_input side SQL: prints everything mysql_cmd expects on stdin (password line if needed, then SQL).
+mysql_input() { mysql_pw_line "$1"; printf '%s\n' "$2"; }
+
+# _mysql_run side SQL: runs SQL with the mysql client inside the container. -N -B tab output.
+_mysql_run() {
+  local side=$1 sql=$2 cmd
+  cmd=$(mysql_cmd "$side") || return $?
+  run_on "$side" "$cmd" < <(mysql_input "$side" "$sql")
 }
 
 # Read-only queries: print the SQL first, rows on stdout.
@@ -170,7 +187,14 @@ src_work_write() { _dim "[source cmd] $1"; confirm "run this work command (files
 tgt_work_write() { _dim "[target cmd] $1"; confirm "run this work command (files/repo/image only) on the TARGET server"; run_on tgt "$1"; }
 
 # Source and target servers can't SSH to each other at the moment, so cross-server data goes through this laptop. This may change (to research with IT); if it does, this can become a direct ssh/scp between the servers.
-pipe_src_to_tgt() { ( set -o pipefail; run_on src "$1" | run_on tgt "$2" ); }
+# Optional third argument: name of a laptop shell function that reads the source output on stdin and writes what the target gets on stdout (to add statements before/after it); nothing is stored.
+# stdin of this function goes to the source command.
+pipe_src_to_tgt() {
+  (
+    set -o pipefail
+    if [ -n "${3:-}" ]; then run_on src "$1" | "$3" | run_on tgt "$2"; else run_on src "$1" | run_on tgt "$2"; fi
+  )
+}
 
 # sql_quote STRING: prints STRING as a SQL string literal ('' for ', \\ for \).
 sql_quote() {
