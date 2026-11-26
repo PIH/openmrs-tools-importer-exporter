@@ -4,7 +4,7 @@
 # _uid KIND N: a valid 36-char uuid, e.g. _uid 1 7 -> 10000007-0000-0000-0000-000000000001
 _uid() { printf '%08d-0000-0000-0000-%012d' "$2" "$1"; }
 
-_clear9() { local db; for db in src_db tgt_db; do testdb.sh sql "$db" "delete from provider; delete from users; delete from person"; done; }
+_clear9() { local db; rm -f "$WORKDIR"/mappings/*.manual.csv; for db in src_db tgt_db; do testdb.sh sql "$db" "delete from provider; delete from users; delete from person"; done; }
 # _add9 db N username email retired [retire_reason]: person N, user N, uuid u/p = _uid 1 N / _uid 2 N
 _add9() {
   local db=$1 n=$2 un=$3 em=$4 ret=$5 why=${6:-} unq emq whyq
@@ -168,4 +168,55 @@ test_two_source_users_same_target_username_conflict() { _clear9
   c=$(_map review-email-conflicts.csv)
   assert_contains "$c" "$(_uid 1 1),alice,user"; assert_contains "$c" "$(_uid 1 2),Alice,user"
   assert_not_contains "$(_map unmatched-users.csv)" "$(_uid 1 2)"
+}
+# I2: in real mode 09 runs after 03, which retired every source user with 'Migrating from <SOURCE_NAME>'.
+test_source_lock_retired_counts_as_not_retired() { _clear9
+  _add9 src_db 1 alice a@x.org 1 'Migrating from TestSource'; _add9 tgt_db 5 alice a@x.org 0
+  _add9 src_db 2 bob b@x.org 1 'Migrating from TestSource'; _add9 tgt_db 6 bob b@x.org 1 'Temp - migrating data'
+  _add9 src_db 3 cy c@x.org 1 'Migrating from OtherSite'; _add9 tgt_db 7 cy c@x.org 0
+  _add9 src_db 4 dee d@x.org 1 'Migrating from TestSource'
+  _run9; assert_eq 0 $rc "$out"
+  f=$(_map fyi-retired-differs.csv)
+  assert_not_contains "$f" "$(_uid 1 1)"; assert_not_contains "$f" "$(_uid 1 2)"
+  assert_contains "$f" "$(_uid 1 3),cy"   # retired for another reason: still FYI
+  assert_contains "$(_map unmatched-users.csv)" "$(_uid 1 4),dee,d@x.org,0"
+  assert_contains "$out" "retired differs (FYI): 1"
+}
+# I6: manual decisions live in *.manual.csv; 09 merges them in (manual wins by source uuid) and never writes them.
+_manual9() { mkdir -p "$WORKDIR/mappings"; printf '%s\n' "${@:2}" > "$WORKDIR/mappings/$1"; }
+test_manual_user_mappings_win_and_survive_rerun() { _clear9
+  _add9 src_db 1 alice a@x.org 0; _add9 tgt_db 5 alice a@x.org 0
+  _add9 src_db 2 bob b@x.org 0; _add9 tgt_db 6 bob b@x.org 0
+  _add9 src_db 3 zed z@x.org 0; _add9 tgt_db 7 zorro q@x.org 0
+  _manual9 user_mappings.manual.csv "$(_uid 1 1) alice,$(_uid 1 7)" "$(_uid 1 3) zed,$(_uid 1 7)"
+  before=$(cksum < "$WORKDIR/mappings/user_mappings.manual.csv")
+  for _ in 1 2; do
+    _run9; assert_eq 0 $rc "$out"
+    m=$(_map user_mappings.csv)
+    assert_contains "$m" "$(_uid 1 1) alice,$(_uid 1 7)"; assert_not_contains "$m" "$(_uid 1 1) alice,$(_uid 1 5)"
+    assert_contains "$m" "$(_uid 1 2) bob,$(_uid 1 6)"; assert_contains "$m" "$(_uid 1 3) zed,$(_uid 1 7)"
+    assert_eq 3 "$(wc -l < "$WORKDIR/mappings/user_mappings.csv" | tr -d ' ')"
+    assert_contains "$out" "manual lines applied from user_mappings.manual.csv: 2"
+  done
+  assert_eq "$before" "$(cksum < "$WORKDIR/mappings/user_mappings.manual.csv")"
+}
+test_manual_provider_mappings_win() { _clear9
+  _add9 src_db 1 alice a@x.org 0; _add9 tgt_db 5 alice a@x.org 0; _prov9 src_db 1 1; _prov9 tgt_db 9 5; _prov9 tgt_db 10 5
+  _manual9 provider_mappings.manual.csv "# decided with the site" "$(_uid 3 1) alice,$(_uid 3 10)" ""
+  _run9; assert_eq 0 $rc "$out"
+  p=$(_map provider_mappings.csv)
+  assert_contains "$p" "$(_uid 3 1) alice,$(_uid 3 10)"; assert_contains "$p" "UnknownProvider"; assert_not_contains "$p" "#"
+  assert_eq 2 "$(wc -l < "$WORKDIR/mappings/provider_mappings.csv" | tr -d ' ')"
+  assert_contains "$out" "manual lines applied from provider_mappings.manual.csv: 1"
+}
+test_manual_mappings_bad_line_refused() { _clear9
+  _add9 src_db 1 alice a@x.org 0; _add9 tgt_db 5 alice a@x.org 0
+  _manual9 user_mappings.manual.csv "not a mapping line"
+  _run9; assert_eq 2 $rc "$out"; assert_contains "$out" "user_mappings.manual.csv"
+  _manual9 user_mappings.manual.csv "$(_uid 1 1) alice,$(_uid 1 5)" "$(_uid 1 1) alice2,$(_uid 1 6)"
+  _run9; assert_eq 2 $rc "$out"; assert_contains "$out" "more than once"
+}
+test_no_manual_files_prints_zero() { _clear9
+  _run9; assert_eq 0 $rc "$out"; assert_contains "$out" "manual lines applied from user_mappings.manual.csv: 0"
+  [ ! -e "$WORKDIR/mappings/user_mappings.manual.csv" ] || { echo "09 created the manual file"; exit 1; }
 }
