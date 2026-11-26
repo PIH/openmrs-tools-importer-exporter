@@ -70,6 +70,18 @@ run_on() {
   if [ "$host" = local ]; then bash -c "$cmd"; else ssh "$host" "$cmd"; fi
 }
 
+# run_on_tty src|tgt CMD: like run_on, but with a terminal (ssh -t) so the command can prompt (e.g. 7z asking for a password).
+# stdin must be the operator's terminal. Local hosts run the command directly.
+run_on_tty() {
+  local side=$1 cmd=$2 host
+  case "$side" in
+    src) host=${SOURCE_HOST:?SOURCE_HOST not set} ;;
+    tgt) host=${TARGET_HOST:?TARGET_HOST not set} ;;
+    *) echo "run_on_tty: side must be src or tgt" >&2; return 2 ;;
+  esac
+  if [ "$host" = local ]; then bash -c "$cmd"; else ssh -t "$host" "$cmd"; fi
+}
+
 # MYSQL_AUTH=prompt: ask once per side (sets a global, so call it without $(...)).
 # MIGRATION_PROMPT_PW_FILE (read instead of the tty) is honoured only under MIGRATION_UNDER_TEST=1.
 _SRC_PW=""; _TGT_PW=""
