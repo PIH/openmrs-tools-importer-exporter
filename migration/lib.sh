@@ -51,6 +51,10 @@ load_settings() {
   export SOURCE_DOCKER TARGET_DOCKER SOURCE_MYSQL_AUTH TARGET_MYSQL_AUTH MIGRATION_MODE WAIT_TIMEOUT_SECONDS
   require_settings WORKDIR SOURCE_HOST TARGET_HOST MIGRATION_MODE
   case "$MIGRATION_MODE" in test|real) ;; *) echo "Setting MIGRATION_MODE must be exactly 'test' or 'real' (got '$MIGRATION_MODE')" >&2; exit 2 ;; esac
+  # SOURCE_NAME ends up in file names and shell commands on the servers: only plain characters.
+  if [ -n "${SOURCE_NAME:-}" ] && ! [[ $SOURCE_NAME =~ ^[A-Za-z0-9._-]+$ ]]; then
+    echo "Setting SOURCE_NAME '$SOURCE_NAME' may only contain letters, digits, '.', '_' and '-'" >&2; exit 2
+  fi
   # Prompt once, up front, in this shell (a later $(src_sql ...) subshell could not keep the answer).
   [ "$SOURCE_MYSQL_AUTH" != prompt ] || _load_mysql_pw src
   [ "$TARGET_MYSQL_AUTH" != prompt ] || _load_mysql_pw tgt
@@ -224,11 +228,11 @@ tgt_cmd_write_stdin() { _dim "[target cmd] $1 (credentials on stdin)"; confirm "
 # file exists already (a re-run wrote a new unsuffixed one), its data rows are appended to it and the new file removed.
 # csv_suffix_pending_cmd DIR prints the files that would change; csv_suffix_cmd DIR does it.
 csv_suffix_pending_cmd() {
-  local qd qn; qd=$(printf '%q' "$1"); qn=$(printf '%q' "$SOURCE_NAME")
+  local qd qn; qd=$(printf '%q' "$1"); qn=$SOURCE_NAME   # SOURCE_NAME is validated in load_settings
   printf '%s' "cd $qd 2>/dev/null || exit 0; for f in *.csv; do [ -f \"\$f\" ] || continue; case \"\$f\" in *-$qn.csv) continue;; esac; echo \"\$f\"; done; true"
 }
 csv_suffix_cmd() {
-  local qd qn; qd=$(printf '%q' "$1"); qn=$(printf '%q' "$SOURCE_NAME")
+  local qd qn; qd=$(printf '%q' "$1"); qn=$SOURCE_NAME   # SOURCE_NAME is validated in load_settings
   printf '%s' "cd $qd && for f in *.csv; do [ -f \"\$f\" ] || continue; case \"\$f\" in *-$qn.csv) continue;; esac; n=\"\${f%.csv}-$qn.csv\"; if [ -e \"\$n\" ]; then tail -n +2 \"\$f\" >> \"\$n\" && rm -f \"\$f\"; else mv \"\$f\" \"\$n\"; fi; done"
 }
 src_work_write() { _dim "[source cmd] $1"; confirm "run this work command (files/repo/image only) on the SOURCE server"; run_on src "$1"; }

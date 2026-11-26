@@ -127,6 +127,11 @@ test_export_review_check_mismatch_reports_only() { _skip_no_tmux && return 0; _s
   assert_contains "$out" "review warnings in export app.log: 6; rows in source-data-review*.csv: 2; changed cases with a review note in source-data-fixes*.csv: 3"
   assert_contains "$out" "DOES NOT ADD UP"
 }
+test_export_review_check_unreadable_csv_skips_comparison() { _skip_no_tmux && return 0; _setup13; _seed_review 2 1 1
+  printf 'rule,patient,list,uuid\nr2,p1,orders,c1\n' > "$WORKDIR/srv/logs/source-data-fixes.csv"   # no review column
+  _run13 $'y\nx\n'; assert_eq 1 $rc "$out"
+  assert_contains "$out" "could not read the report CSVs"; assert_not_contains "$out" "DOES NOT ADD UP"
+}
 test_export_renames_csvs_with_site_idempotent() { _skip_no_tmux && return 0; _setup13; _seed_review 1 1 0
   _run13 $'y\nx\n'; assert_eq 1 $rc "$out"
   local l="$WORKDIR/srv/logs"

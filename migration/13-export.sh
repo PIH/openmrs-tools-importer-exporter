@@ -41,19 +41,26 @@ fi
 # A = warning lines in app.log; B = rows in source-data-review*.csv; C = changed cases (distinct rule,list,uuid)
 # with a review note in source-data-fixes*.csv. Reports only.
 review_py='import csv, glob
-b = sum(sum(1 for _ in csv.DictReader(open(f, newline=""))) for f in glob.glob("source-data-review*.csv"))
+b = sum(sum(1 for _ in csv.DictReader(open(f, newline="", encoding="utf-8"))) for f in glob.glob("source-data-review*.csv"))
 c = set()
 for f in glob.glob("source-data-fixes*.csv"):
-    for r in csv.DictReader(open(f, newline="")):
-        if r.get("review"):
-            c.add((r.get("rule"), r.get("list"), r.get("uuid")))
+    rd = csv.DictReader(open(f, newline="", encoding="utf-8"))
+    if not {"rule", "list", "uuid", "review"} <= set(rd.fieldnames or []):
+        raise SystemExit(1)
+    for r in rd:
+        if r["review"]:
+            c.add((r["rule"], r["list"], r["uuid"]))
 print(b, len(c))'
 review_check() {
   local a bc b c
   a=$(run_on src "grep -h WARN $q_logs/app.log 2>/dev/null | grep -c 'left as it is\\|left as they are\\|(review)'; true" | head -n 1)
-  bc=$(run_on src "cd $q_logs 2>/dev/null && python3 -I -c $(printf '%q' "$review_py"); true" | tail -n 1)
+  bc=$(run_on src "cd $q_logs 2>/dev/null && python3 -I -c $(printf '%q' "$review_py") 2>/dev/null; true" | tail -n 1)
+  a=${a:-0}
+  if ! [[ $a =~ ^[0-9]+$ && $bc =~ ^[0-9]+\ [0-9]+$ ]]; then
+    echo "review warnings in export app.log: $a; could not read the report CSVs - check them by hand (source-data-review*.csv, source-data-fixes*.csv in $SOURCE_SERVER_DIR/logs)"
+    return 0
+  fi
   read -r b c <<<"$bc"
-  a=${a:-0}; b=${b:-0}; c=${c:-0}
   echo "review warnings in export app.log: $a; rows in source-data-review*.csv: $b; changed cases with a review note in source-data-fixes*.csv: $c (B + C should equal A)"
   if [ $((b + c)) -ne "$a" ]; then
     echo "DOES NOT ADD UP ($b + $c is not $a) - look at the export app.log review lines"

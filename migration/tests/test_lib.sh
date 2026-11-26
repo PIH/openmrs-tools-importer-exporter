@@ -55,3 +55,6 @@ delete from users"
   assert_eq 2 "$(src_sql '  -- hi
  SELECT 1+1' 2>/dev/null)"
 }
+test_load_settings_rejects_source_name_with_space() { cp tests/fixtures/test.env "$WORKDIR/bad.env"; echo 'SOURCE_NAME="a b"' >> "$WORKDIR/bad.env"
+  out=$(bash -c 'source lib.sh; load_settings "$1"' _ "$WORKDIR/bad.env" 2>&1); assert_eq 2 $? "$out"; assert_contains "$out" "SOURCE_NAME"
+}
