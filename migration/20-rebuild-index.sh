@@ -21,7 +21,13 @@ prop=hibernate.search.indexing.listeners.enabled=false
 
 # 1 + 2. Remove the property and restart (nothing to do if step 07's line is not there).
 echo "--- Part 1: indexing property in $TARGET_RUNTIME_PROPERTIES"
-if run_on tgt "$sudo_prefix grep -qxF $(q "$prop") $file"; then
+rc=0
+run_on tgt "$sudo_prefix grep -qxF $(q "$prop") $file" || rc=$?
+case "$rc" in 0|1) ;; *)
+  echo "Could not read $TARGET_RUNTIME_PROPERTIES on the target (status $rc: file missing or unreadable, or sudo/ssh failed); not touching anything." >&2
+  exit 2 ;;
+esac
+if [ "$rc" = 0 ]; then
   # GNU sed (the target is Linux); no .bak copy, the file holds passwords.
   tgt_cmd_write "$sudo_prefix sed -i '/^hibernate\\.search\\.indexing\\.listeners\\.enabled=false\$/d' $file"
   echo "--- Part 2: restart the target"

@@ -38,6 +38,14 @@ test_indexing_line_absent_skips() { _env20
   assert_contains "$out" "not in"; [ ! -e "$WORKDIR/tgt.restart" ] || { echo "restarted although nothing changed"; exit 1; }
   assert_eq a=b "$(cat "$WORKDIR/openmrs-runtime.properties")"
 }
+test_missing_properties_file_fails() { _env20
+  rm -f "$WORKDIR/openmrs-runtime.properties"
+  out=$(printf 'y\ny\ny\n' | ./20-rebuild-index.sh "$WORKDIR/l.env" 2>&1); rc=$?
+  assert_eq 2 "$rc" "$out"
+  assert_contains "$out" "$WORKDIR/openmrs-runtime.properties"; assert_not_contains "$out" "nothing to remove"
+  assert_not_contains "$out" "Next: 21"; [ ! -e "$WORKDIR/tgt.restart" ] || exit 1
+  [ ! -s "$WORKDIR/curl.stdin" ] || exit 1
+}
 test_rebuild_password_not_in_argv() { _env20
   : > "$WORKDIR/openmrs-runtime.properties"
   out=$(printf 'y\ny\n' | ./20-rebuild-index.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
