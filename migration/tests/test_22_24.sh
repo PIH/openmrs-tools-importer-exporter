@@ -57,12 +57,12 @@ test_shutdown_runs_compose_down_with_setting() { mkdir -p "$WORKDIR/stub" "$WORK
 _seed24() { _stub7z; rm -rf "$WORKDIR/exports" "$WORKDIR/logs-keep" "$WORKDIR/lists" "$WORKDIR/mappings" "$WORKDIR"/*.7z "$WORKDIR/files-a.zip" "$WORKDIR/patients-failed-pass1" "$WORKDIR/repo"
   mkdir -p "$WORKDIR/exports" "$WORKDIR/lists" "$WORKDIR/mappings" "$WORKDIR/repo/src" "$WORKDIR/patients-failed-pass1"
   : > "$WORKDIR/repo/src/.env"; : > "$WORKDIR/files-a.zip"; : > "$WORKDIR/exports/p.json"; : > "$WORKDIR/lists/x.csv"
-  : > "$WORKDIR/logs/invalid-identifiers.csv"; }
+  : > "$WORKDIR/logs/invalid-identifiers-TestSource.csv"; }
 
 test_clean_asks_about_invalid_identifiers_first() { _seed24; _l22env
   out=$(printf 'n\n' | ./24-archive-and-clean.sh "$WORKDIR/l.env" 2>&1); assert_eq 1 $? "$out"
   assert_contains "$out" "invalid-identifiers"; assert_contains "$out" "not Jira"
-  [ -d "$WORKDIR/exports" ] && [ -f "$WORKDIR/logs/invalid-identifiers.csv" ] || { echo "deleted"; exit 1; }
+  [ -d "$WORKDIR/exports" ] && [ -f "$WORKDIR/logs/invalid-identifiers-TestSource.csv" ] || { echo "deleted"; exit 1; }
   [ ! -e "$WORKDIR/7z.argv" ] || { echo "7z ran"; exit 1; }
 }
 test_clean_stops_when_archive_not_copied() { _seed24; _l22env

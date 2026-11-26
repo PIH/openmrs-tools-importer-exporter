@@ -104,6 +104,45 @@ test_export_runs_in_test_mode_on_source() { _skip_no_tmux && return 0; _setup13
   touch "$WORKDIR/release"; _wait_gone
 }
 
+# Fixture: a finished export with review warnings in app.log and the two report CSVs.
+# $1 = warning lines in app.log, then B rows in the review csv, C changed cases (one duplicated row) with a review note.
+_seed_review() { local l="$WORKDIR/srv/logs" i; mkdir -p "$l" "$WORKDIR/srv/exports/users"; echo '{}' > "$WORKDIR/srv/exports/users/a.json"
+  : > "$l/app.log"
+  for i in $(seq 1 "$1"); do echo "[t] WARN: patient p$i dose left as it is (review)" >> "$l/app.log"; done
+  echo "[t] INFO: unrelated line left as it is" >> "$l/app.log"   # not a warning: not counted
+  printf 'rule,patient,list,uuid,details\n' > "$l/source-data-review.csv"
+  for i in $(seq 1 "$2"); do printf 'r1,p%s,drugOrders,u%s,"multi\nline"\n' "$i" "$i" >> "$l/source-data-review.csv"; done
+  printf 'rule,patient,list,uuid,field,from,to,review\n' > "$l/source-data-fixes.csv"
+  for i in $(seq 1 "$3"); do printf 'r2,p%s,orders,c%s,f,1,2,"check it"\n' "$i" "$i" >> "$l/source-data-fixes.csv"; done
+  [ "$3" -gt 0 ] && printf 'r2,p1,orders,c1,g,3,4,"check it"\n' >> "$l/source-data-fixes.csv"   # same case again: counted once
+  printf 'r3,p9,orders,z9,f,1,2,\n' >> "$l/source-data-fixes.csv"   # no review note: not counted
+  return 0; }
+test_export_review_check_adds_up() { _skip_no_tmux && return 0; _setup13; _seed_review 5 2 3
+  _run13 $'y\nx\n'; assert_eq 1 $rc "$out"
+  assert_contains "$out" "review warnings in export app.log: 5; rows in source-data-review*.csv: 2; changed cases with a review note in source-data-fixes*.csv: 3 (B + C should equal A)"
+  assert_not_contains "$out" "DOES NOT ADD UP"
+}
+test_export_review_check_mismatch_reports_only() { _skip_no_tmux && return 0; _setup13; _seed_review 6 2 3
+  _run13 $'y\nx\n'; assert_eq 1 $rc "$out"   # 1 = our "x" stop answer, not a failure of the check
+  assert_contains "$out" "review warnings in export app.log: 6; rows in source-data-review*.csv: 2; changed cases with a review note in source-data-fixes*.csv: 3"
+  assert_contains "$out" "DOES NOT ADD UP"
+}
+test_export_renames_csvs_with_site_idempotent() { _skip_no_tmux && return 0; _setup13; _seed_review 1 1 0
+  _run13 $'y\nx\n'; assert_eq 1 $rc "$out"
+  local l="$WORKDIR/srv/logs"
+  [ -f "$l/source-data-review-TestSource.csv" ] && [ -f "$l/source-data-fixes-TestSource.csv" ] || { echo "not renamed: $(ls "$l")"; exit 1; }
+  [ ! -e "$l/source-data-review.csv" ] || { echo "old name left"; exit 1; }
+  assert_contains "$out" "source-data-review.csv"
+  _run13 $'x\n'; assert_eq 1 $rc "$out"   # nothing to rename: no confirmation asked, the answer goes to the r/c prompt
+  assert_not_contains "$out" "Proceed?"
+  assert_eq "" "$(ls "$l" | grep 'TestSource-TestSource' || true)"
+  # a re-run wrote a new unsuffixed file: its rows are appended, the file goes away
+  printf 'r1,p7,drugOrders,u7,more\n' > "$WORKDIR/x.csv"; { echo 'rule,patient,list,uuid,details'; cat "$WORKDIR/x.csv"; } > "$l/source-data-review.csv"
+  _run13 $'y\nx\n'; assert_eq 1 $rc "$out"
+  [ ! -e "$l/source-data-review.csv" ] || { echo "old name left"; exit 1; }
+  assert_eq 4 "$(wc -l < "$l/source-data-review-TestSource.csv" | tr -d ' ')"   # header + the multi-line row (2 lines) + the appended row
+}
+
 # ---- 14-copy-exports ----
 _setup14() {
   rm -rf "$WORKDIR/srv" "$WORKDIR/tsrv"

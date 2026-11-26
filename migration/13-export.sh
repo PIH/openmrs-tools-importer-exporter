@@ -14,7 +14,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$here/lib.sh"
 load_settings "${1:-}"
 step_header 13 "export from the source server"
-require_settings SOURCE_SERVER_DIR NODE_IMAGE SOURCE_DOCKER
+require_settings SOURCE_SERVER_DIR NODE_IMAGE SOURCE_DOCKER SOURCE_NAME
 
 q_dir=$(printf '%q' "$SOURCE_SERVER_DIR")
 q_exports=$(printf '%q' "$SOURCE_SERVER_DIR/exports")
@@ -37,10 +37,42 @@ if tmux_running src export; then
   exit 0
 fi
 
+# Review warnings in the export log against the two report CSVs (every warning is in exactly one of them):
+# A = warning lines in app.log; B = rows in source-data-review*.csv; C = changed cases (distinct rule,list,uuid)
+# with a review note in source-data-fixes*.csv. Reports only.
+review_py='import csv, glob
+b = sum(sum(1 for _ in csv.DictReader(open(f, newline=""))) for f in glob.glob("source-data-review*.csv"))
+c = set()
+for f in glob.glob("source-data-fixes*.csv"):
+    for r in csv.DictReader(open(f, newline="")):
+        if r.get("review"):
+            c.add((r.get("rule"), r.get("list"), r.get("uuid")))
+print(b, len(c))'
+review_check() {
+  local a bc b c
+  a=$(run_on src "grep -h WARN $q_logs/app.log 2>/dev/null | grep -c 'left as it is\\|left as they are\\|(review)'; true" | head -n 1)
+  bc=$(run_on src "cd $q_logs 2>/dev/null && python3 -I -c $(printf '%q' "$review_py"); true" | tail -n 1)
+  read -r b c <<<"$bc"
+  a=${a:-0}; b=${b:-0}; c=${c:-0}
+  echo "review warnings in export app.log: $a; rows in source-data-review*.csv: $b; changed cases with a review note in source-data-fixes*.csv: $c (B + C should equal A)"
+  if [ $((b + c)) -ne "$a" ]; then
+    echo "DOES NOT ADD UP ($b + $c is not $a) - look at the export app.log review lines"
+  fi
+}
+# Put the site name on the CSV reports (idempotent); asks only when there is something to rename.
+suffix_csvs() {
+  local pending; pending=$(run_on src "$(csv_suffix_pending_cmd "$SOURCE_SERVER_DIR/logs")")
+  [ -n "$pending" ] || return 0
+  echo "CSV reports without the site name:"; printf '%s\n' "$pending"
+  src_work_write "$(csv_suffix_cmd "$SOURCE_SERVER_DIR/logs")"
+}
+
 # Previous run: exports or logs present.
 if run_on src "[ -n \"\$(ls -A $q_exports $q_logs 2>/dev/null)\" ]"; then
   echo "Found exports and/or logs from an earlier export run:"
   show_progress
+  review_check
+  suffix_csvs
   echo
   answer=$(ask "r = re-run (retries only the failures), c = clear exports and logs and start fresh, anything else = stop [r/c]:")
   case "$answer" in

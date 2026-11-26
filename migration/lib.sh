@@ -219,6 +219,18 @@ tgt_cmd_write() { _dim "[target cmd] $1"; confirm "run this command on the TARGE
 # tgt_cmd_write_stdin CMD STDIN_TEXT: like tgt_cmd_write, but STDIN_TEXT (e.g. a curl config with a password) goes to
 # the command's stdin; only CMD is printed.
 tgt_cmd_write_stdin() { _dim "[target cmd] $1 (credentials on stdin)"; confirm "run this command on the TARGET server"; run_on tgt "$1" < <(printf '%s\n' "$2"); }
+# Shell snippets (run on a server) that put the site name on the CSV reports in DIR: <name>.csv -> <name>-<SOURCE_NAME>.csv.
+# Files that already end in -<SOURCE_NAME>.csv are left alone, so running it again changes nothing. If the suffixed
+# file exists already (a re-run wrote a new unsuffixed one), its data rows are appended to it and the new file removed.
+# csv_suffix_pending_cmd DIR prints the files that would change; csv_suffix_cmd DIR does it.
+csv_suffix_pending_cmd() {
+  local qd qn; qd=$(printf '%q' "$1"); qn=$(printf '%q' "$SOURCE_NAME")
+  printf '%s' "cd $qd 2>/dev/null || exit 0; for f in *.csv; do [ -f \"\$f\" ] || continue; case \"\$f\" in *-$qn.csv) continue;; esac; echo \"\$f\"; done; true"
+}
+csv_suffix_cmd() {
+  local qd qn; qd=$(printf '%q' "$1"); qn=$(printf '%q' "$SOURCE_NAME")
+  printf '%s' "cd $qd && for f in *.csv; do [ -f \"\$f\" ] || continue; case \"\$f\" in *-$qn.csv) continue;; esac; n=\"\${f%.csv}-$qn.csv\"; if [ -e \"\$n\" ]; then tail -n +2 \"\$f\" >> \"\$n\" && rm -f \"\$f\"; else mv \"\$f\" \"\$n\"; fi; done"
+}
 src_work_write() { _dim "[source cmd] $1"; confirm "run this work command (files/repo/image only) on the SOURCE server"; run_on src "$1"; }
 tgt_work_write() { _dim "[target cmd] $1"; confirm "run this work command (files/repo/image only) on the TARGET server"; run_on tgt "$1"; }
 

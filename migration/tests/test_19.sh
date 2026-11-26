@@ -74,13 +74,39 @@ test_verify_prints_csv_row_counts() { _skip_no_tmux && return 0; _setup19
   printf 'PATIENTS                  = 5\n' > "$WORKDIR/counts/source-before.txt"; printf 'PATIENTS                  = 1\n' > "$WORKDIR/counts/target-before.txt"
   testdb.sh sql tgt_db "select 1" >/dev/null
   printf 'users\t99\n' > "$WORKDIR/counts/target-tables-before.txt"
-  _run19 $'n\n'; assert_eq 0 $rc "$out"
-  assert_contains "$out" "source-data-fixes.csv: 3 rows"; assert_contains "$out" "source-data-fixes-2.csv: 1 rows"
-  assert_contains "$out" "verify-users.csv: 0 rows"; assert_contains "$out" "complex-obs-missing.csv: 1 rows"
+  _run19 $'y\nn\n'; assert_eq 0 $rc "$out"   # y: add the site name to the CSV names
+  assert_contains "$out" "source-data-fixes-TestSource.csv: 3 rows"; assert_contains "$out" "source-data-fixes-2-TestSource.csv: 1 rows"
+  assert_contains "$out" "verify-users-TestSource.csv: 0 rows"; assert_contains "$out" "complex-obs-missing-TestSource.csv: 1 rows"
   assert_contains "$out" "source-data-review*.csv: absent"; assert_contains "$out" "visits-before-birthdate*.csv: absent"; assert_contains "$out" "invalid-identifiers*.csv: absent"
   assert_contains "$out" "patients verified OK: 1"
   assert_contains "$out" "PATIENTS"; assert_contains "$out" "7"
   [ -s "$WORKDIR/counts/target-tables-after.txt" ] || { echo "no after snapshot"; exit 1; }
   assert_contains "$out" "users"          # the table-count diff shows users changed from 99
   assert_contains "$out" "Next: 20-rebuild-index.sh"
+}
+
+_finished19() { local l="$WORKDIR/tsrv/logs"; touch "$l/verify.done"; echo "[t] INFO: ok" > "$l/verify-console.log"
+  printf 'PATIENTS                  = 5\n' > "$WORKDIR/counts/source-before.txt"; printf 'PATIENTS                  = 1\n' > "$WORKDIR/counts/target-before.txt"
+  printf 'users\t99\n' > "$WORKDIR/counts/target-tables-before.txt"; }
+test_verify_prints_verified_failed_not_verified_counts() { _skip_no_tmux && return 0; _setup19; _finished19
+  local e="$WORKDIR/tsrv/exports"; mkdir -p "$e/verified" "$e/failed_verification" "$e/successful"
+  touch "$e/verified/a_patient.json" "$e/verified/b_patient.json" "$e/verified/c_patient.json" "$e/verified/notes.txt" "$e/failed_verification/d_patient.json" "$e/successful/e_patient.json" "$e/successful/f_patient.json"
+  _run19 $'n\n'; assert_eq 0 $rc "$out"
+  assert_contains "$out" "verify: verified 3, failed verification 1, not verified 2"
+}
+test_verify_counts_zero_when_folders_missing() { _skip_no_tmux && return 0; _setup19; _finished19
+  _run19 $'n\n'; assert_eq 0 $rc "$out"
+  assert_contains "$out" "verify: verified 0, failed verification 0, not verified 0"
+}
+test_verify_renames_csvs_with_site_idempotent() { _skip_no_tmux && return 0; _setup19; _finished19
+  local l="$WORKDIR/tsrv/logs"
+  printf 'h\n1\n2\n' > "$l/source-data-fixes.csv"; printf 'h\n1\n' > "$l/invalid-identifiers-TestSource.csv"; printf 'h\n1\n' > "$l/verify-users.csv"
+  _run19 $'y\nn\n'; assert_eq 0 $rc "$out"
+  [ -f "$l/source-data-fixes-TestSource.csv" ] && [ -f "$l/verify-users-TestSource.csv" ] && [ ! -e "$l/source-data-fixes.csv" ] || { echo "not renamed: $(ls "$l")"; exit 1; }
+  assert_contains "$out" "source-data-fixes-TestSource.csv: 2 rows"; assert_contains "$out" "invalid-identifiers-TestSource.csv: 1 rows"
+  assert_eq "" "$(ls "$l" | grep 'TestSource-TestSource' || true)"
+  _run19 $'n\n'; assert_eq 0 $rc "$out"   # nothing to rename now: no extra confirmation
+  assert_not_contains "$out" "CSV reports without the site name"
+  assert_eq "" "$(ls "$l" | grep 'TestSource-TestSource' || true)"
+  assert_contains "$out" "source-data-fixes-TestSource.csv: 2 rows"
 }

@@ -14,7 +14,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$here/lib.sh"
 load_settings "${1:-}"
 step_header 19 "verify the import"
-require_settings TARGET_SERVER_DIR NODE_IMAGE TARGET_DOCKER TARGET_DB TARGET_MYSQL_CONTAINER
+require_settings TARGET_SERVER_DIR NODE_IMAGE TARGET_DOCKER TARGET_DB TARGET_MYSQL_CONTAINER SOURCE_NAME
 
 # EARLIER_IMPORTS paths must be under TARGET_SERVER_DIR: only that directory is mounted in the node container. Checked before anything starts.
 IFS=';' read -r -a entries <<<"${EARLIER_IMPORTS:-}"
@@ -40,13 +40,22 @@ counts="$WORKDIR/counts"
 
 # Row counts (header excluded) of the report files in the target logs; "absent" when there is none.
 csv_row_counts() {
-  local patterns="source-data-fixes*.csv source-data-review*.csv visits-before-birthdate*.csv invalid-identifiers*.csv verify-users.csv complex-obs-missing.csv"
+  local patterns="source-data-fixes*.csv source-data-review*.csv visits-before-birthdate*.csv invalid-identifiers*.csv verify-users*.csv complex-obs-missing*.csv"
   run_on tgt "cd $q_logs 2>/dev/null || { echo 'no logs directory: $TARGET_SERVER_DIR/logs'; exit 0; }; for p in $patterns; do found=0; for f in \$p; do [ -f \"\$f\" ] || continue; found=1; echo \"\$f: \$(( \$(wc -l < \"\$f\") - 1 )) rows\"; done; [ \$found = 1 ] || echo \"\$p: absent\"; done"
+}
+
+# Put the site name on the CSV reports in the target logs (idempotent); asks only when there is something to rename.
+suffix_csvs() {
+  local pending; pending=$(run_on tgt "$(csv_suffix_pending_cmd "$TARGET_SERVER_DIR/logs")")
+  [ -n "$pending" ] || return 0
+  echo "CSV reports without the site name:"; printf '%s\n' "$pending"
+  tgt_work_write "$(csv_suffix_cmd "$TARGET_SERVER_DIR/logs")"
 }
 
 report() {
   echo "--- Verifier results in the console log ---"
   run_on tgt "echo \"patients verified OK: \$(grep -c 'verified successfully' $q_console 2>/dev/null)\"; echo \"patients with differences: \$(grep -c 'Verification failed for patient' $q_console 2>/dev/null)\"; grep -h 'Complex obs check:' $q_console 2>/dev/null; true"
+  run_on tgt "n() { find $q_dir/exports/\$1 -maxdepth 1 -name '*_patient.json' 2>/dev/null | wc -l | tr -d ' '; }; echo \"verify: verified \$(n verified), failed verification \$(n failed_verification), not verified \$(n successful)\""
   mkdir -p "$counts"
   local f
   for f in target-before.txt source-before.txt target-tables-before.txt; do
@@ -67,6 +76,7 @@ report() {
     END { printf "%-26s %12s %12s %12s\n", "", "source-before", "target-before", "target-now"; for (i = 1; i <= n; i++) { k = order[i]; printf "%-26s %12s %12s %12s\n", k, v[1, k], v[2, k], v[3, k] } }' \
     "$counts/source-before.txt" "$counts/target-before.txt" "$counts/target-after.txt"
   echo "--- Report files in $TARGET_SERVER_DIR/logs (data rows, header excluded) ---"
+  suffix_csvs
   csv_row_counts
 }
 
