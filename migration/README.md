@@ -195,7 +195,7 @@ Long runs show progress when run again:
 - **17 import patients:** while running, shows successful, failed and left for the current pass, and the failure classes. After it ended, it resets flush to 1 and offers another pass. Failed patient files are moved back between the passes.
 - **19 verify:** while running, shows progress. After it ended, prints the count differences and the report row counts, and offers another run (verified patient files are not checked again).
 
-Do not run 07 or 16 twice without thinking: 07 sets values that are shown first and asked; 16 should run once, right after the user import (it updates only the users that did not exist before 15).
+Run 16 right after 15, and again after any later 15 pass that created more users. It only touches users the import created (not those in 15's before-import list), so re-running it is safe. 07 sets values that are shown first and asked; think before running it twice.
 
 ## Files written
 
@@ -205,16 +205,16 @@ Do not run 07 or 16 twice without thinking: 07 sets values that are shown first 
 
 | File | Written by | Contents | Deleted by |
 |---|---|---|---|
-| settings file (wherever you put it) | 00 | hosts, usernames, uuids, no passwords. Not in the repo. | you |
-| `logs/<script>.<timestamp>.log` | every script | what the script printed (counts, uuids, commands, no secrets) | stays |
+| settings file (wherever you put it) | 00 | hosts, **user data** (migrating username), uuids, no passwords. Not in the repo. | not deleted by 24; delete or protect by hand |
+| `logs/<script>.<timestamp>.log` | every script | the full output of each script: commands, counts, **patient data** (patient uuids and dossier identifiers from 21, failure uuids from 17 and 19) and **user data** (usernames). No passwords or hashes. | not deleted by 24; 24 lists it as left behind. Delete or protect by hand |
 | `mappings/user_mappings.csv`, `provider_mappings.csv` | 09 | **user data** (uuid, username) | 24 |
 | `mappings/review-email-conflicts.csv`, `unmatched-users.csv`, `fyi-retired-differs.csv` | 09 | **user data** (usernames, emails) | 24 |
 | `mappings/concept_name_mappings.draft.csv`, `concept-names-no-candidate.csv`, `concept-mappings-voided-target.csv` | 10 | concept names and uuids, no personal data | 24 |
 | `lists/users.csv`, `providers.csv`, `patients.csv`, `relationships.csv` | 11 | uuids only; **patient data** (patient and relationship uuids) | 24 |
-| `counts/*.txt` (object counts, table counts) | 13, 19 | counts only | stays |
-| `target-users-before-import.txt` | 15 | uuids of target users, **user data** | stays, not deleted by 24 (delete by hand) |
+| `counts/*.txt` (object counts, table counts) | 13, 19 | counts only | not deleted by 24; delete or protect by hand |
+| `target-users-before-import.txt` | 15 | uuids of target users, **user data** | not deleted by 24; delete or protect by hand |
 
-Password hashes are never written on the laptop.
+Password hashes are never written on the laptop. At the end, 24 prints a "Left on this laptop" list of the logs, counts, `target-users-before-import.txt` and the settings file. It deletes none of them.
 
 ### Source server (`SOURCE_SERVER_DIR`)
 

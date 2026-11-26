@@ -78,6 +78,7 @@ test_clean_deletes_confirmed_things_keeps_archive() { _seed24; _l22env
   [ -d "$WORKDIR/repo" ] || { echo "repo removed"; exit 1; }
   ls "$WORKDIR"/TestSource-exports-*.7z >/dev/null
   assert_contains "$(cat "$WORKDIR/7z.argv")" "-p -mhe=on"; assert_contains "$out" "Migration steps complete."
+  assert_contains "$out" "Left on this laptop:"; assert_contains "$out" "The logs contain patient identifiers and usernames - delete them or keep them protected."
   assert_not_contains "$out" "Next:"
 }
 test_clean_declined_deletion_keeps_files() { _seed24; _l22env

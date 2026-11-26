@@ -51,3 +51,10 @@ rm -rf "${WORKDIR:?}/lists" "${WORKDIR:?}/mappings"
 echo
 echo "Migration steps complete."
 echo "The archive $archive is kept on the target."
+echo
+echo "Left on this laptop:"
+echo "  $WORKDIR/logs"
+echo "  $WORKDIR/counts"
+echo "  $WORKDIR/target-users-before-import.txt"
+echo "  the settings file: ${1:-${MIGRATION_ENV:-}}"
+echo "The logs contain patient identifiers and usernames - delete them or keep them protected."
