@@ -170,6 +170,27 @@ ask() {
   printf '%s\n' "$ans"
 }
 
+# ask_secret "prompt": reads one line without echo (prints it on stdout; call as $(...) only if you do not need the
+# terminal state afterwards). Under MIGRATION_UNDER_TEST=1 MIGRATION_PROMPT_PW_FILE is read instead of the tty.
+ask_secret() {
+  local pw=""
+  if [ "${MIGRATION_UNDER_TEST:-}" = 1 ] && [ -n "${MIGRATION_PROMPT_PW_FILE:-}" ]; then
+    IFS= read -r pw <"$MIGRATION_PROMPT_PW_FILE" || true
+  else
+    read -rsp "$1 " pw </dev/tty || true; echo >&2
+  fi
+  printf '%s\n' "$pw"
+}
+
+# curl_user_config USER PASSWORD: prints a curl config (for `curl --config -`) with the credentials, so they
+# travel on stdin and never appear in a command line.
+curl_user_config() {
+  local u=$1 p=$2 bs='\' q='"'
+  u=${u//"$bs"/"$bs$bs"}; u=${u//"$q"/"$bs$q"}
+  p=${p//"$bs"/"$bs$bs"}; p=${p//"$q"/"$bs$q"}
+  printf 'user = "%s:%s"\n' "$u" "$p"
+}
+
 _refuse_in_test_mode() {
   if [ "${MIGRATION_MODE:-}" = test ]; then
     echo "Refused in test mode: $1 on the $2 server" >&2
@@ -183,6 +204,9 @@ tgt_sql_write() { _dim "[target SQL] $1"; confirm "run this SQL on the TARGET da
 src_cmd_write() { _refuse_in_test_mode "command" source; _dim "[source cmd] $1"; confirm "run this command on the SOURCE server"; run_on src "$1"; }
 tgt_cmd_write() { _dim "[target cmd] $1"; confirm "run this command on the TARGET server"; run_on tgt "$1"; }
 # Work writes: repo checkout, docker image pull, files under *_SERVER_DIR only. Allowed in test mode.
+# tgt_cmd_write_stdin CMD STDIN_TEXT: like tgt_cmd_write, but STDIN_TEXT (e.g. a curl config with a password) goes to
+# the command's stdin; only CMD is printed.
+tgt_cmd_write_stdin() { _dim "[target cmd] $1 (credentials on stdin)"; confirm "run this command on the TARGET server"; run_on tgt "$1" < <(printf '%s\n' "$2"); }
 src_work_write() { _dim "[source cmd] $1"; confirm "run this work command (files/repo/image only) on the SOURCE server"; run_on src "$1"; }
 tgt_work_write() { _dim "[target cmd] $1"; confirm "run this work command (files/repo/image only) on the TARGET server"; run_on tgt "$1"; }
 
