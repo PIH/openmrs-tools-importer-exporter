@@ -21,12 +21,13 @@ q_exports=$(printf '%q' "$SOURCE_SERVER_DIR/exports")
 q_logs=$(printf '%q' "$SOURCE_SERVER_DIR/logs")
 q_console=$(printf '%q' "$SOURCE_SERVER_DIR/logs/export-console.log")
 
-# Last "Export summary" lines (the console log, else any log file) and the number of exported json files per type.
+# Last "Export summary" lines (the console log, else any log file) and the number of exported json files per type
+# (the exporters write <uuid>_user.json, _provider.json, _patient.json, _relationship.json flat in exports/).
 show_progress() {
   echo "--- Export summary lines (latest) ---"
   run_on src "if [ -f $q_console ]; then grep -h 'Export summary' $q_console | tail -n 5; else grep -rh 'Export summary' $q_logs 2>/dev/null | tail -n 5; fi; true"
-  echo "--- Exported json files per folder ---"
-  run_on src "cd $q_exports 2>/dev/null && for d in */; do [ -d \"\$d\" ] && echo \"\${d%/}: \$(find \"\$d\" -type f -name '*.json' | wc -l | tr -d ' ')\"; done; true"
+  echo "--- Exported json files per type ---"
+  run_on src "$(export_counts_cmd "$SOURCE_SERVER_DIR/exports")" | sed 's/ \([0-9]*\)$/: \1/'
 }
 
 if tmux_running src export; then

@@ -142,8 +142,9 @@ Run these after both servers are locked, so users and concepts added on the day 
 **13 `13-export.sh`** On the source, in tmux session `export`: exportUsers, exportProviders, exportPatients, exportRelationships. [21-25] Before the first start it saves object counts of both databases and per-table counts of the target in `WORKDIR/counts/` [26] (existing snapshots are kept). It asks before clearing old exports and logs. It returns at once. Run it again to see progress.
 - Check: the session has ended and the "Export summary" lines show no failures. If there are failures, run it again: it retries only the failures.
 
-**14 `14-copy-exports.sh`** Streams `<SOURCE_SERVER_DIR>/exports` to the target as a tar stream through the laptop. Compares the file count per folder on both sides.
+**14 `14-copy-exports.sh`** Streams `<SOURCE_SERVER_DIR>/exports` to the target as a tar stream through the laptop. The exporters write all files flat in `exports/` (`<uuid>_user.json`, `_provider.json`, `_patient.json`, `_relationship.json`); 14 compares the number of files per type (and per sub-folder, if there are any) on both sides. It refuses, and copies nothing, once an import has started on the target (`exports/` there holds `successful/`, `failed/`, `mapped_to_existing/`, `verified/` or `failed_verification/`): the importers move processed files into those folders, and copying again would put them back at the top level, where they would be imported again.
 - Check: the counts match.
+- To start the import over from a fresh copy: restore the target database from the 06 backup, delete `<TARGET_SERVER_DIR>/exports` on the target, then run 14 again.
 
 ### Import
 

@@ -235,6 +235,16 @@ csv_suffix_cmd() {
   local qd qn; qd=$(printf '%q' "$1"); qn=$SOURCE_NAME   # SOURCE_NAME is validated in load_settings
   printf '%s' "cd $qd && for f in *.csv; do [ -f \"\$f\" ] || continue; case \"\$f\" in *-$qn.csv) continue;; esac; n=\"\${f%.csv}-$qn.csv\"; if [ -e \"\$n\" ]; then tail -n +2 \"\$f\" >> \"\$n\" && rm -f \"\$f\"; else mv \"\$f\" \"\$n\"; fi; done"
 }
+# export_counts_cmd DIR: shell snippet (run on a server) printing the export files in DIR, one "<name> <count>" line
+# each, sorted: the exporters write <uuid>_user.json, _provider.json, _patient.json and _relationship.json flat in DIR,
+# counted per type ("users", "providers", "patients", "relationships"); any sub-folder is listed as "<folder>/" with
+# its file count. Prints nothing when DIR does not exist.
+export_counts_cmd() {
+  local qd; qd=$(printf '%q' "$1")
+  printf '%s' "cd $qd 2>/dev/null || exit 0; { for t in user provider patient relationship; do echo \"\${t}s \$(find . -maxdepth 1 -type f -name \"*_\$t.json\" | wc -l | tr -d ' ')\"; done; for d in */; do [ -d \"\$d\" ] && echo \"\$d \$(find \"\$d\" -type f | wc -l | tr -d ' ')\"; done; } | sort; true"
+}
+# Folders the importers and verifiers create inside the exports folder (files move there once processed).
+export_processed_dirs="successful failed mapped_to_existing verified failed_verification"
 src_work_write() { _dim "[source cmd] $1"; confirm "run this work command (files/repo/image only) on the SOURCE server"; run_on src "$1"; }
 tgt_work_write() { _dim "[target cmd] $1"; confirm "run this work command (files/repo/image only) on the TARGET server"; run_on tgt "$1"; }
 

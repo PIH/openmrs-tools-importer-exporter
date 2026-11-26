@@ -5,7 +5,7 @@ _have_tmux() { command -v tmux >/dev/null 2>&1; }
 _skip_no_tmux() { _have_tmux || { echo "SKIP (tmux not installed)"; return 0; }; return 1; }
 
 # _setup13: settings with separate server dirs, a fake docker. The fake "run" prints Export summary lines,
-# writes one json per folder and then waits until $WORKDIR/release exists. "exec" passes through to the
+# writes one user and one patient json flat into exports/ (the exporters' real layout) and then waits until $WORKDIR/release exists. "exec" passes through to the
 # real docker (the test DB), except the object-count SQL, which the small test schema can't run.
 _setup13() {
   local realdocker; realdocker=$(command -v docker)
@@ -15,8 +15,8 @@ _setup13() {
 #!/bin/bash
 if [ "\$1" = run ]; then
   echo "\$@" >> $WORKDIR/docker.calls
-  mkdir -p $WORKDIR/srv/exports/users $WORKDIR/srv/exports/patients
-  echo '{}' > $WORKDIR/srv/exports/users/u_1.json; echo '{}' > $WORKDIR/srv/exports/patients/p_1.json
+  mkdir -p $WORKDIR/srv/exports
+  echo '{}' > $WORKDIR/srv/exports/u1_user.json; echo '{}' > $WORKDIR/srv/exports/p1_patient.json
   echo "Export summary: {\"exported\":1,\"failed\":0} in 1 s"
   for i in \$(seq 1 100); do [ -e $WORKDIR/release ] && break; sleep 0.2; done
 elif [ "\$1" = exec ]; then
@@ -58,7 +58,7 @@ test_export_refuses_when_session_running_shows_progress() { _skip_no_tmux && ret
   _run13 ""; assert_eq 0 $rc "$out"
   assert_contains "$out" "The export is running"
   assert_contains "$out" 'Export summary: {"exported":1,"failed":0}'
-  assert_contains "$out" "users: 1"; assert_contains "$out" "patients: 1"
+  assert_contains "$out" "users: 1"; assert_contains "$out" "patients: 1"; assert_contains "$out" "providers: 0"; assert_contains "$out" "relationships: 0"
   assert_not_contains "$out" "Proceed?"; assert_not_contains "$out" "Next:"
   assert_eq 0 "$(wc -c < "$WORKDIR/docker.calls" | tr -d ' ')"   # nothing started
   touch "$WORKDIR/release"; _wait_gone
@@ -78,26 +78,26 @@ test_export_saves_counts_and_keeps_existing() { _skip_no_tmux && return 0; _setu
 }
 test_export_rerun_after_finish_keeps_exports_clear_removes_them() { _skip_no_tmux && return 0; _setup13
   _run13 $'y\n'; assert_eq 0 $rc "$out"; touch "$WORKDIR/release"; _wait_gone
-  rm -f "$WORKDIR/release"; echo '{}' > "$WORKDIR/srv/exports/users/old.json"
+  rm -f "$WORKDIR/release"; echo '{}' > "$WORKDIR/srv/exports/old_user.json"
   _run13 $'r\ny\n'; assert_eq 0 $rc "$out"; _wait_session
   assert_contains "$out" "Found exports and/or logs"; assert_contains "$out" "Export summary: "
-  [ -e "$WORKDIR/srv/exports/users/old.json" ] || { echo "re-run removed exports"; exit 1; }
+  [ -e "$WORKDIR/srv/exports/old_user.json" ] || { echo "re-run removed exports"; exit 1; }
   touch "$WORKDIR/release"; _wait_gone; rm -f "$WORKDIR/release"
   _run13 $'c\ny\ny\n'; assert_eq 0 $rc "$out"; _wait_session
   assert_contains "$out" "rm -rf"
-  [ ! -e "$WORKDIR/srv/exports/users/old.json" ] || { echo "old export not cleared"; exit 1; }
+  [ ! -e "$WORKDIR/srv/exports/old_user.json" ] || { echo "old export not cleared"; exit 1; }
   touch "$WORKDIR/release"; _wait_gone
 }
 test_export_stop_answer_changes_nothing() { _skip_no_tmux && return 0; _setup13
-  mkdir -p "$WORKDIR/srv/exports/users"; echo '{}' > "$WORKDIR/srv/exports/users/a.json"
+  mkdir -p "$WORKDIR/srv/exports"; echo '{}' > "$WORKDIR/srv/exports/a_user.json"
   _run13 $'n\n'; assert_eq 1 $rc "$out"
-  [ -e "$WORKDIR/srv/exports/users/a.json" ] || { echo "cleared without asking"; exit 1; }
+  [ -e "$WORKDIR/srv/exports/a_user.json" ] || { echo "cleared without asking"; exit 1; }
   assert_not_contains "$(tmux ls 2>&1 || true)" "export:"
 }
 test_export_clear_not_confirmed_keeps_files() { _skip_no_tmux && return 0; _setup13
-  mkdir -p "$WORKDIR/srv/exports/users"; echo '{}' > "$WORKDIR/srv/exports/users/a.json"
+  mkdir -p "$WORKDIR/srv/exports"; echo '{}' > "$WORKDIR/srv/exports/a_user.json"
   _run13 $'c\nn\n'; assert_eq 1 $rc "$out"
-  [ -e "$WORKDIR/srv/exports/users/a.json" ] || { echo "cleared without confirm"; exit 1; }
+  [ -e "$WORKDIR/srv/exports/a_user.json" ] || { echo "cleared without confirm"; exit 1; }
 }
 test_export_runs_in_test_mode_on_source() { _skip_no_tmux && return 0; _setup13
   _run13 $'y\n'; assert_eq 0 $rc "$out"; assert_not_contains "$out" "Refused in test mode"
@@ -106,7 +106,7 @@ test_export_runs_in_test_mode_on_source() { _skip_no_tmux && return 0; _setup13
 
 # Fixture: a finished export with review warnings in app.log and the two report CSVs.
 # $1 = warning lines in app.log, then B rows in the review csv, C changed cases (one duplicated row) with a review note.
-_seed_review() { local l="$WORKDIR/srv/logs" i; mkdir -p "$l" "$WORKDIR/srv/exports/users"; echo '{}' > "$WORKDIR/srv/exports/users/a.json"
+_seed_review() { local l="$WORKDIR/srv/logs" i; mkdir -p "$l" "$WORKDIR/srv/exports/users"; echo '{}' > "$WORKDIR/srv/exports/a_user.json"
   : > "$l/app.log"
   for i in $(seq 1 "$1"); do echo "[t] WARN: patient p$i dose left as it is (review)" >> "$l/app.log"; done
   echo "[t] INFO: unrelated line left as it is" >> "$l/app.log"   # not a warning: not counted
@@ -151,9 +151,11 @@ test_export_renames_csvs_with_site_idempotent() { _skip_no_tmux && return 0; _se
 # ---- 14-copy-exports ----
 _setup14() {
   rm -rf "$WORKDIR/srv" "$WORKDIR/tsrv"
-  mkdir -p "$WORKDIR/srv/exports/users" "$WORKDIR/srv/exports/patients" "$WORKDIR/srv/exports/empty dir"
-  echo a > "$WORKDIR/srv/exports/users/u1.json"; echo b > "$WORKDIR/srv/exports/users/u2.json"
-  echo c > "$WORKDIR/srv/exports/patients/p1.json"
+  # The exporters' real layout: <uuid>_<type>.json flat in exports/.
+  mkdir -p "$WORKDIR/srv/exports"
+  echo a > "$WORKDIR/srv/exports/u1_user.json"; echo b > "$WORKDIR/srv/exports/u2_user.json"
+  echo c > "$WORKDIR/srv/exports/p1_patient.json"; echo d > "$WORKDIR/srv/exports/v1_provider.json"
+  echo e > "$WORKDIR/srv/exports/r1_relationship.json"
   cp tests/fixtures/test.env "$WORKDIR/l.env"
   { echo "SOURCE_SERVER_DIR=$WORKDIR/srv"; echo "TARGET_SERVER_DIR=$WORKDIR/tsrv"; } >> "$WORKDIR/l.env"
   export TMUX_TMPDIR="$WORKDIR"
@@ -163,13 +165,14 @@ _run14() { out=$(printf '%s' "$1" | ./14-copy-exports.sh "$WORKDIR/l.env" 2>&1);
 
 test_copy_exports_counts_match() { _setup14
   _run14 $'y\n'; assert_eq 0 $rc "$out"
-  assert_eq b "$(cat "$WORKDIR/tsrv/exports/users/u2.json")"
+  assert_eq b "$(cat "$WORKDIR/tsrv/exports/u2_user.json")"
+  assert_contains "$out" "users 2"; assert_contains "$out" "patients 1"; assert_contains "$out" "providers 1"; assert_contains "$out" "relationships 1"
   assert_contains "$out" "tar c -C $WORKDIR/srv exports"
   assert_contains "$out" "mkdir -p $WORKDIR/tsrv && tar x -C $WORKDIR/tsrv"
   assert_contains "$out" "File counts match"; assert_contains "$out" "Next: 15-import-users.sh"
 }
 test_copy_exports_mismatch_fails() { _setup14
-  mkdir -p "$WORKDIR/tsrv/exports/users"; echo stale > "$WORKDIR/tsrv/exports/users/leftover.json"
+  mkdir -p "$WORKDIR/tsrv/exports"; echo stale > "$WORKDIR/tsrv/exports/leftover_user.json"
   _run14 $'y\n'; assert_eq 1 $rc "$out"
   assert_contains "$out" "users (source 2, target 3)"; assert_not_contains "$out" "patients ("
   assert_not_contains "$out" "Next:"
@@ -188,4 +191,20 @@ test_copy_exports_without_exports_fails() { _setup14
 }
 test_copy_exports_works_in_test_mode() { _setup14
   _run14 $'y\n'; assert_eq 0 $rc "$out"; assert_not_contains "$out" "Refused in test mode"
+}
+test_copy_exports_without_exported_files_fails() { _setup14
+  rm -f "$WORKDIR/srv/exports"/*.json
+  _run14 $'y\n'; assert_eq 1 $rc "$out"; assert_contains "$out" "run 13-export.sh first"; [ ! -e "$WORKDIR/tsrv" ] || { echo "copied"; exit 1; }
+}
+test_copy_exports_counts_sub_folders_too() { _setup14
+  mkdir -p "$WORKDIR/srv/exports/extra"; echo x > "$WORKDIR/srv/exports/extra/x.json"
+  _run14 $'y\n'; assert_eq 0 $rc "$out"; assert_contains "$out" "extra/ 1"; assert_contains "$out" "File counts match"
+}
+# Copying again after an import would put processed files back at the top level, and the importers would read them again.
+test_copy_exports_refuses_after_import_started() {
+  for d in successful failed mapped_to_existing; do _setup14
+    mkdir -p "$WORKDIR/tsrv/exports/$d"; echo '{}' > "$WORKDIR/tsrv/exports/$d/u1_user.json"
+    _run14 $'y\n'; assert_eq 1 $rc "$out ($d)"; assert_contains "$out" "$d"; assert_not_contains "$out" "Proceed?"
+    [ ! -e "$WORKDIR/tsrv/exports/u1_user.json" ] || { echo "copied over a started import ($d)"; exit 1; }
+  done
 }
