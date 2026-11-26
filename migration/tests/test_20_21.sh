@@ -46,6 +46,17 @@ test_missing_properties_file_fails() { _env20
   assert_not_contains "$out" "Next: 21"; [ ! -e "$WORKDIR/tgt.restart" ] || exit 1
   [ ! -s "$WORKDIR/curl.stdin" ] || exit 1
 }
+test_failing_sudo_is_not_treated_as_absent() { _env20
+  printf '#!/bin/sh\nexit 1\n' > "$WORKDIR/stub/failsudo"; chmod +x "$WORKDIR/stub/failsudo"
+  _l20env TARGET_FILE_SUDO=failsudo
+  printf 'hibernate.search.indexing.listeners.enabled=false\n' > "$WORKDIR/openmrs-runtime.properties"
+  out=$(printf 'y\ny\ny\n' | ./20-rebuild-index.sh "$WORKDIR/l.env" 2>&1); rc=$?
+  assert_eq 2 "$rc" "$out"
+  assert_contains "$out" "$WORKDIR/openmrs-runtime.properties"; assert_not_contains "$out" "nothing to remove"
+  assert_not_contains "$out" "Next: 21"; [ ! -e "$WORKDIR/tgt.restart" ] || exit 1
+  [ ! -s "$WORKDIR/curl.stdin" ] || exit 1
+  assert_eq 1 "$(grep -c indexing "$WORKDIR/openmrs-runtime.properties")"
+}
 test_rebuild_password_not_in_argv() { _env20
   : > "$WORKDIR/openmrs-runtime.properties"
   out=$(printf 'y\ny\n' | ./20-rebuild-index.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"

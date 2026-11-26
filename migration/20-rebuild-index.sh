@@ -21,10 +21,13 @@ prop=hibernate.search.indexing.listeners.enabled=false
 
 # 1 + 2. Remove the property and restart (nothing to do if step 07's line is not there).
 echo "--- Part 1: indexing property in $TARGET_RUNTIME_PROPERTIES"
-rc=0
-run_on tgt "$sudo_prefix grep -qxF $(q "$prop") $file" || rc=$?
+# The sentinel proves grep itself ran: a failing sudo/ssh also exits 1, like grep's "no match".
+probe="grep -qxF $(q "$prop") $file; echo \"grep-rc=\$?\""
+probe_out=$(run_on tgt "$sudo_prefix sh -c $(printf '%q' "$probe")" || true)
+rc=$(printf '%s\n' "$probe_out" | sed -n 's/^grep-rc=\([0-9][0-9]*\)$/\1/p')
+[ "$(printf '%s\n' "$rc" | grep -c .)" = 1 ] || rc=unknown
 case "$rc" in 0|1) ;; *)
-  echo "Could not read $TARGET_RUNTIME_PROPERTIES on the target (status $rc: file missing or unreadable, or sudo/ssh failed); not touching anything." >&2
+  echo "Could not read $TARGET_RUNTIME_PROPERTIES on the target (grep status: $rc; file missing or unreadable, or sudo/ssh failed); not touching anything." >&2
   exit 2 ;;
 esac
 if [ "$rc" = 0 ]; then
