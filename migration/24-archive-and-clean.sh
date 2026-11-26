@@ -19,18 +19,24 @@ done
 sdir=${SOURCE_SERVER_DIR%/}; tdir=${TARGET_SERVER_DIR%/}
 is_yes() { case "$1" in y|Y|yes|YES|Yes) return 0 ;; esac; return 1; }
 
+archive="$tdir/$SOURCE_NAME-exports-$(date +%Y%m%d).7z"
+if run_on tgt "test -e $(printf '%q' "$archive")"; then
+  echo "Refusing: $archive already exists on the target (7z would update it, possibly under a different password). Move or remove it first." >&2
+  exit 2
+fi
+
 echo "--- invalid-identifiers (wiki 47) ---"
 run_on tgt "ls -l $(printf '%q' "$tdir/logs")/invalid-identifiers*.csv 2>/dev/null || echo 'no invalid-identifiers*.csv in $tdir/logs'"
 echo "File(s): $tdir/logs/invalid-identifiers*.csv on the target server."
 a=$(ask "Has it been copied to the Haiti team through the usual channel (not Jira)? [y/N]")
 is_yes "$a" || { echo "Not confirmed, stopping before anything is deleted." >&2; exit 1; }
 
-archive="$tdir/$SOURCE_NAME-exports-$(date +%Y%m%d).7z"
 cmd="7z a -p -mhe=on $(printf '%q' "$archive") $(printf '%q' "$tdir/exports")"
 _dim "[target cmd, interactive] $cmd"
 confirm "create the encrypted archive on the TARGET server (7z asks for the password on the server's terminal)"
 run_on_tty tgt "$cmd"
-echo "Archive: $archive (on the target server)"
+echo "Archive on the target server:"
+run_on tgt "ls -l $(printf '%q' "$archive")"
 echo "Reminder: copy it to the Azure backup, and use the default backup password for database backups [46.2-46.3]"
 a=$(ask "Has the archive been copied to the backup location? [y/N]")
 is_yes "$a" || { echo "Not confirmed, stopping before anything is deleted." >&2; exit 1; }

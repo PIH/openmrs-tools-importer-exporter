@@ -13,12 +13,28 @@ step_header 22 "open the target"
 require_settings TARGET_MYSQL_CONTAINER TARGET_DB SOURCE_NAME
 
 is_yes() { case "$1" in y|Y|yes|YES|Yes) return 0 ;; esac; return 1; }
-for q in "Has the verify output (step 19) been reviewed and accepted?" \
-         "Has the search index rebuild (step 20) finished?" \
-         "Are the spot checks (step 21) done?"; do
+
+# Read-only check first: the operator sees the warning before answering anything.
+flush=$(tgt_sql "select @@innodb_flush_log_at_trx_commit")
+if [ "$flush" != 1 ]; then
+  echo "!!! WARNING: innodb_flush_log_at_trx_commit is '$flush' on the target, not 1. Not changed by this script." >&2
+  echo "!!! Set it back to 1 (durable commits) before the target goes live." >&2
+else
+  echo "innodb_flush_log_at_trx_commit = 1 (ok)"
+fi
+
+echo
+echo "This step lets users log in to the TARGET (production in real mode). Everything else must be finished first:"
+for q in "17 import finished" "18 files copied" "19 verify output reviewed" "20 index rebuilt" "21 spot checks done"; do echo "  - $q"; done
+for q in "17: has the patient import finished?" "18: have the files been copied?" "19: has the verify output been reviewed and accepted?" \
+         "20: has the search index rebuild finished?" "21: are the spot checks done?"; do
   a=$(ask "$q [y/N]")
   is_yes "$a" || { echo "Not confirmed, stopping. Nothing was changed." >&2; exit 1; }
 done
+
+echo "Before users get in (do these by hand, right after if not yet done):"
+echo "  - re-enable backups in cron on the target and run one backup [42]"
+echo "  - re-enable 2FA for the migrating user${MIGRATING_USERNAME:+ ($MIGRATING_USERNAME)} [43]"
 
 unretire() { # reason expected_zero_note
   local reason=$1 note=$2 q n sql
@@ -39,15 +55,4 @@ else
   unretire "Migrating from $SOURCE_NAME" ""
 fi
 
-flush=$(tgt_sql "select @@innodb_flush_log_at_trx_commit")
-if [ "$flush" != 1 ]; then
-  echo "!!! WARNING: innodb_flush_log_at_trx_commit is '$flush' on the target, not 1. Not changed by this script." >&2
-  echo "!!! Set it back to 1 (durable commits) before the target goes live." >&2
-else
-  echo "innodb_flush_log_at_trx_commit = 1 (ok)"
-fi
-
-echo "Reminders (do these by hand):"
-echo "  - re-enable backups in cron on the target and run one backup [42]"
-echo "  - re-enable 2FA for the migrating user${MIGRATING_USERNAME:+ ($MIGRATING_USERNAME)} [43]"
 next_step "23-shutdown-source.sh" "that users can log in to the target again, flush is 1, a backup was run and 2FA is back on"

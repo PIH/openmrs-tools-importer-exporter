@@ -19,13 +19,13 @@ STUB
 _retired22() { testdb.sh sql tgt_db "select group_concat(username order by username) from users where retired=1"; }
 
 test_open_target_refuses_on_no() { _seed22; _l22env
-  for ans in 'y\ny\nn\n' 'n\n' 'y\nmaybe\ny\n'; do
+  for ans in 'y\ny\ny\ny\nn\n' 'n\n' 'y\nmaybe\ny\ny\ny\n'; do
     out=$(printf "$ans" | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 1 $? "$out"
     assert_eq "alice,bob,carol" "$(_retired22)"
   done
 }
 test_open_target_unretires_both_reasons_only() { _seed22; _l22env MIGRATION_MODE=real
-  out=$(printf 'y\ny\ny\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
+  out=$(printf 'y\ny\ny\ny\ny\ny\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
   assert_eq "carol" "$(_retired22)"
   assert_eq "Left the clinic" "$(testdb.sh sql tgt_db "select retire_reason from users where username='carol'")"
   assert_eq "NULL|NULL|NULL" "$(testdb.sh sql tgt_db "select concat(ifnull(retire_reason,'NULL'),'|',ifnull(retired_by,'NULL'),'|',ifnull(date_retired,'NULL')) from users where username='alice'")"
@@ -33,13 +33,13 @@ test_open_target_unretires_both_reasons_only() { _seed22; _l22env MIGRATION_MODE
   assert_contains "$out" "[43]"; assert_contains "$out" "[42]"; assert_contains "$out" "Next: 23-shutdown-source.sh"
 }
 test_open_target_zero_rows_skips_write() { _seed22; testdb.sh sql tgt_db "update users set retired=0 where retire_reason like 'Temp%' or retire_reason like 'Migrating%'"; _l22env
-  out=$(printf 'y\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
+  out=$(printf 'y\ny\ny\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
   assert_contains "$out" "0 users retired"; assert_not_contains "$out" "Proceed?"
   assert_contains "$out" "0 is expected in test mode"
 }
 test_open_target_warns_when_flush_not_1() { _seed22; _l22env
   testdb.sh sql tgt_db "set global innodb_flush_log_at_trx_commit=2"
-  out=$(printf 'y\ny\ny\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); rc=$?
+  out=$(printf 'y\ny\ny\ny\ny\ny\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); rc=$?
   testdb.sh sql tgt_db "set global innodb_flush_log_at_trx_commit=1"
   assert_eq 0 $rc "$out"; assert_contains "$out" "WARNING"; assert_contains "$out" "'2'"
 }
@@ -91,4 +91,24 @@ test_clean_refuses_root_server_dir() { _seed24
     [ "$rc" -ne 0 ] || { echo "no refusal for $kv"; exit 1; }
     [ -d "$WORKDIR/exports" ] || { echo "deleted for $kv"; exit 1; }
   done
+}
+
+test_open_target_banner_and_items() { _seed22; _l22env
+  out=$(printf 'y\ny\nn\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 1 $? "$out"
+  assert_contains "$out" "lets users log in to the TARGET (production in real mode)"
+  for w in "17 import finished" "18 files copied" "19 verify output reviewed" "20 index rebuilt" "21 spot checks done"; do assert_contains "$out" "$w"; done
+  assert_eq "alice,bob,carol" "$(_retired22)"
+}
+test_open_target_flush_warning_before_confirm() { _seed22; _l22env
+  testdb.sh sql tgt_db "set global innodb_flush_log_at_trx_commit=2"
+  out=$(printf 'y\ny\ny\ny\ny\ny\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1)
+  testdb.sh sql tgt_db "set global innodb_flush_log_at_trx_commit=1"
+  w=${out%%WARNING*}; c=${out%%Proceed?*}
+  [ ${#w} -lt ${#c} ] || { echo "warning not before first confirm"; exit 1; }
+  r=${out%%\[43\]*}; [ ${#r} -lt ${#c} ] || { echo "reminders not before confirm"; exit 1; }
+}
+test_clean_refuses_when_archive_exists() { _seed24; _l22env
+  : > "$WORKDIR/TestSource-exports-$(date +%Y%m%d).7z"
+  out=$(printf 'y\ny\ny\ny\ny\ny\n' | ./24-archive-and-clean.sh "$WORKDIR/l.env" 2>&1); assert_eq 2 $? "$out"
+  assert_contains "$out" "already exists"; [ -d "$WORKDIR/exports" ] && [ ! -e "$WORKDIR/7z.argv" ] || exit 1
 }
