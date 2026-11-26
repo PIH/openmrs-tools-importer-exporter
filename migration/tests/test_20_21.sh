@@ -2,8 +2,8 @@
 _l20env() { cp tests/fixtures/test.env "$WORKDIR/l.env"; local kv; for kv in "$@"; do echo "$kv" >> "$WORKDIR/l.env"; done; }
 
 _PWFILE() { printf '%s\n' 'S3cret"pw\x' > "$WORKDIR/pw"; export MIGRATION_PROMPT_PW_FILE="$WORKDIR/pw"; }
-# Stub curl: appends argv (one line per call) and stdin to files; the rebuild POST sets search.indexVersion
-# in tgt_db (like OpenMRS does); the patient search answers from $WORKDIR/curl.reply.
+# Stub curl: appends argv (one line per call) and stdin to files; the rebuild POST fails (exit 22) when STUB_CURL_FAIL is set
+# (the patient search answers from $WORKDIR/curl.reply).
 _stub_curl() {
   mkdir -p "$WORKDIR/stub"
   cat > "$WORKDIR/stub/curl" <<'STUB'
@@ -11,7 +11,7 @@ _stub_curl() {
 echo "$*" >> "$WORKDIR/curl.argv"
 case "$*" in *"--config -"*) cat >> "$WORKDIR/curl.stdin" ;; esac
 case "$*" in
-  *searchindexupdate*) [ -z "${STUB_NO_INDEX:-}" ] && testdb.sh sql tgt_db "insert into global_property(property,property_value,uuid) values('search.indexVersion','v-new',uuid())" ;;
+  *searchindexupdate*) [ -z "${STUB_CURL_FAIL:-}" ] || exit 22 ;;
   *"/patient?identifier="*) cat "$WORKDIR/curl.reply" 2>/dev/null ;;
 esac
 exit 0
@@ -22,7 +22,7 @@ STUB
 }
 _env20() { _l20env "$@"; _stub_curl; _PWFILE
   rm -f "$WORKDIR/openmrs-runtime.properties" "$WORKDIR/tgt.restart" "$WORKDIR/up"; : > "$WORKDIR/up"
-  testdb.sh sql tgt_db "delete from global_property where property='search.indexVersion'"; }
+}
 
 test_indexing_line_removed() { _env20
   printf 'a=b\nhibernate.search.indexing.listeners.enabled=false\nc=d\n' > "$WORKDIR/openmrs-runtime.properties"
@@ -42,7 +42,7 @@ test_rebuild_password_not_in_argv() { _env20
   : > "$WORKDIR/openmrs-runtime.properties"
   out=$(printf 'y\ny\n' | ./20-rebuild-index.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
   argv=$(cat "$WORKDIR/curl.argv")
-  assert_contains "$argv" "searchindexupdate"; assert_contains "$argv" "--config -"; assert_contains "$argv" '{"async": true}'
+  assert_contains "$argv" "searchindexupdate"; assert_contains "$argv" "--config -"; assert_contains "$argv" '{"async": false}'; assert_contains "$argv" "--max-time"; assert_contains "$argv" "--fail"
   assert_not_contains "$argv" "S3cret"; assert_not_contains "$out" "S3cret"
   assert_contains "$(cat "$WORKDIR/curl.stdin")" 'user = "migrator:S3cret\"pw\\x"'
 }
@@ -51,11 +51,11 @@ test_rebuild_declined_does_not_post() { _env20
   printf 'n\n' | ./20-rebuild-index.sh "$WORKDIR/l.env" >/dev/null 2>&1; assert_eq 1 $?
   [ ! -s "$WORKDIR/curl.stdin" ] || exit 1
 }
-test_index_wait_times_out() { _env20 WAIT_TIMEOUT_SECONDS=2; export STUB_NO_INDEX=1
+test_rebuild_curl_failure_fails() { _env20; export STUB_CURL_FAIL=1
   : > "$WORKDIR/openmrs-runtime.properties"
-  out=$(printf 'y\ny\n' | ./20-rebuild-index.sh "$WORKDIR/l.env" 2>&1); rc=$?; unset STUB_NO_INDEX
+  out=$(printf 'y\ny\n' | ./20-rebuild-index.sh "$WORKDIR/l.env" 2>&1); rc=$?; unset STUB_CURL_FAIL
   [ "$rc" -ne 0 ] || { echo "expected failure: $out"; exit 1; }
-  assert_contains "$out" "Timed out"; assert_not_contains "$out" "Next: 21"
+  assert_not_contains "$out" "Next: 21"; assert_not_contains "$out" "puppet can run"
 }
 test_indexing_line_uses_file_sudo_prefix() { _env20 TARGET_FILE_SUDO=env
   printf 'hibernate.search.indexing.listeners.enabled=false\n' > "$WORKDIR/openmrs-runtime.properties"

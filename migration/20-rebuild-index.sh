@@ -3,9 +3,8 @@
 #   20-rebuild-index.sh [settings-file]
 # 1. removes hibernate.search.indexing.listeners.enabled=false (added by step 07) from TARGET_RUNTIME_PROPERTIES,
 # 2. restarts the target and waits until it answers,
-# 3. asks for the migrating user's OpenMRS password and starts an asynchronous index rebuild
-#    (POST searchindexupdate); the password goes to curl on stdin, never into a command line,
-# 4. polls the global property search.indexVersion until it has a new value.
+# 3. asks for the migrating user's OpenMRS password and rebuilds the index with a synchronous POST
+#    searchindexupdate (returns when done; the password goes to curl on stdin, never into a command line).
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 # shellcheck disable=SC1091
@@ -32,28 +31,13 @@ else
 fi
 wait_for_target
 
-# 3. Start the rebuild.
-echo "--- Part 3: rebuild the search index as $MIGRATING_USERNAME"
-before=$(_mysql_run tgt "select property_value from global_property where property='search.indexVersion'" | head -n 1 || true)
+# 3. Rebuild the index. async=false: the call returns when the rebuild is done (about 12 minutes on a ZL Central copy).
+echo "--- Part 3: rebuild the search index as $MIGRATING_USERNAME (synchronous, up to ${WAIT_TIMEOUT_SECONDS}s)"
 pw=$(ask_secret "OpenMRS password of $MIGRATING_USERNAME on the target (not shown):")
-tgt_cmd_write_stdin "curl -fsS --config - -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' -d '{\"async\": true}' $(q "$TARGET_OPENMRS_URL/ws/rest/v1/searchindexupdate")" \
+start=$SECONDS
+tgt_cmd_write_stdin "curl --fail -sS --max-time $WAIT_TIMEOUT_SECONDS --config - -X POST -H 'Content-Type: application/json' -H 'Accept: application/json' -d '{\"async\": false}' -o /dev/null -w 'HTTP result: %{http_code}\n' $(q "$TARGET_OPENMRS_URL/ws/rest/v1/searchindexupdate")" \
   "$(curl_user_config "$MIGRATING_USERNAME" "$pw")"
 unset pw
-echo "Rebuild requested."
+echo "The index is rebuilt (took $((SECONDS - start))s); puppet can run on the target again now."
 
-# 4. Wait for search.indexVersion to be set (a changed value if there was one before).
-echo "--- Part 4: waiting for the property search.indexVersion (up to ${WAIT_TIMEOUT_SECONDS}s)"
-sql="select property_value from global_property where property='search.indexVersion'"
-_dim "[target SQL] $sql (every 10 s)"
-start=$SECONDS
-while :; do
-  v=$(_mysql_run tgt "$sql" | head -n 1 || true)
-  if [ -n "$v" ] && [ "$v" != "$before" ]; then echo "search.indexVersion is set after $((SECONDS - start))s"; break; fi
-  waited=$((SECONDS - start)); left=$((WAIT_TIMEOUT_SECONDS - waited))
-  if [ "$left" -le 0 ]; then echo "Timed out after ${waited}s waiting for search.indexVersion; check the OpenMRS log on the target." >&2; exit 1; fi
-  echo "  ${waited}s elapsed, not set yet..."
-  sleep $((left < 10 ? left : 10))
-done
-echo "The index is rebuilt; puppet can run on the target again now."
-
-next_step "21-spot-checks.sh" "search.indexVersion is set and a patient search in the target UI finds a migrated patient"
+next_step "21-spot-checks.sh" "that a patient search in the target UI finds a migrated patient"
