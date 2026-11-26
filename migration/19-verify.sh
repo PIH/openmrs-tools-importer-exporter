@@ -3,7 +3,7 @@
 #   19-verify.sh [settings-file]
 # Starts verifyPatients.js, verifyRelationships.js, verifyUsers.js and verifyComplexObs.js one after the other
 # (a failing verifier does not stop the next ones), then verifyUsers.js again for each entry of EARLIER_IMPORTS
-# (exportsdir|usermappings|facilityuuid, separated by ;), in tmux session "verify" on the target, with the console
+# (exportsdir|usermappings|facilityuuid, separated by ;; both paths must be under TARGET_SERVER_DIR, the only directory the node container mounts), in tmux session "verify" on the target, with the console
 # output copied to <TARGET_SERVER_DIR>/logs/verify-console.log. The verifiers only read the target through REST.
 # It does not wait: run it again to see progress. Run it once more after it ended: it prints the per-table count
 # differences against the counts saved by step 13, the object counts before and after, and the row counts of the
@@ -15,6 +15,22 @@ source "$here/lib.sh"
 load_settings "${1:-}"
 step_header 19 "verify the import"
 require_settings TARGET_SERVER_DIR NODE_IMAGE TARGET_DOCKER TARGET_DB TARGET_MYSQL_CONTAINER
+
+# EARLIER_IMPORTS paths must be under TARGET_SERVER_DIR: only that directory is mounted in the node container. Checked before anything starts.
+IFS=';' read -r -a entries <<<"${EARLIER_IMPORTS:-}"
+for entry in "${entries[@]}"; do
+  [ -n "${entry// /}" ] || continue
+  IFS='|' read -r e_dir e_map e_fac <<<"$entry"
+  if [ -z "$e_dir" ] || [ -z "$e_map" ] || [ -z "$e_fac" ]; then
+    echo "EARLIER_IMPORTS entry '$entry' must be exportsdir|usermappings|facilityuuid" >&2; exit 2
+  fi
+  for p in "$e_dir" "$e_map"; do
+    case "$p" in
+      "${TARGET_SERVER_DIR%/}"/*) ;;
+      *) echo "EARLIER_IMPORTS entry '$entry': '$p' is not under TARGET_SERVER_DIR ($TARGET_SERVER_DIR); the node container only sees that directory. Copy it there." >&2; exit 2 ;;
+    esac
+  done
+done
 
 q_dir=$(printf '%q' "$TARGET_SERVER_DIR")
 q_logs=$(printf '%q' "$TARGET_SERVER_DIR/logs")

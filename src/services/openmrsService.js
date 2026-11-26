@@ -115,7 +115,6 @@ export async function postDataIfNotExists(resourceUrl, data, uuid, { skipExisten
 }
 
 
-// DELETE on the target; without purge=true, the REST API voids or retires the resource
 // Status code of a GET (any status, no error thrown); the body is not read, so large files are not downloaded
 export async function fetchStatus(url, server = 'TARGET') {
   const response = await getClient(server).get(url, { validateStatus: () => true, responseType: 'stream' });
@@ -123,6 +122,7 @@ export async function fetchStatus(url, server = 'TARGET') {
   return response.status;
 }
 
+// DELETE on the target; without purge=true, the REST API voids or retires the resource
 export async function deleteData(url) {
   const response = await timed('DELETE', url, () => targetClient.delete(url));
   if (response.status !== 204 && response.status !== 200) {

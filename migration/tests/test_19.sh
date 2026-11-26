@@ -41,13 +41,19 @@ test_verify_runs_all_verifiers_in_order_with_semicolons() { _skip_no_tmux && ret
   [ -f "$WORKDIR/tsrv/logs/verify.done" ] || { echo "no marker"; exit 1; }
 }
 test_verify_earlier_imports_rerun_verify_users_with_their_settings() { _skip_no_tmux && return 0; _setup19
-  echo "EARLIER_IMPORTS='/old/one|/old/one-users.txt|aaaa;/old/two|/old/two-users.txt|bbbb'" >> "$WORKDIR/l.env"
+  echo "EARLIER_IMPORTS='$WORKDIR/tsrv/old/one|$WORKDIR/tsrv/old/one-users.txt|aaaa;$WORKDIR/tsrv/old/two|$WORKDIR/tsrv/old/two-users.txt|bbbb'" >> "$WORKDIR/l.env"
   touch "$WORKDIR/release"
   _run19 $'y\n'; assert_eq 0 $rc "$out"; _wait19
   assert_eq "verifyPatients.js verifyRelationships.js verifyUsers.js verifyComplexObs.js verifyUsers.js verifyUsers.js" "$(sed 's/.* node //' "$WORKDIR/docker.calls" | tr '\n' ' ' | sed 's/ $//')"
   local calls; calls=$(cat "$WORKDIR/docker.calls")
-  assert_contains "$calls" "-e TARGET_DIR=/old/one -e EXPORT_USER_MAPPINGS_FILE=/old/one-users.txt -e OPENMRS_SOURCE_FACILITY_UUID=aaaa --network host"
-  assert_contains "$calls" "-e TARGET_DIR=/old/two -e EXPORT_USER_MAPPINGS_FILE=/old/two-users.txt -e OPENMRS_SOURCE_FACILITY_UUID=bbbb --network host"
+  assert_contains "$calls" "-e TARGET_DIR=$WORKDIR/tsrv/old/one -e EXPORT_USER_MAPPINGS_FILE=$WORKDIR/tsrv/old/one-users.txt -e OPENMRS_SOURCE_FACILITY_UUID=aaaa --network host"
+  assert_contains "$calls" "-e TARGET_DIR=$WORKDIR/tsrv/old/two -e EXPORT_USER_MAPPINGS_FILE=$WORKDIR/tsrv/old/two-users.txt -e OPENMRS_SOURCE_FACILITY_UUID=bbbb --network host"
+}
+test_verify_earlier_import_outside_server_dir_refused() { _skip_no_tmux && return 0; _setup19
+  echo "EARLIER_IMPORTS='$WORKDIR/tsrv/old|/elsewhere/users.txt|aaaa'" >> "$WORKDIR/l.env"
+  _run19 $'y\ny\n'; assert_eq 2 $rc "$out"
+  assert_contains "$out" "/elsewhere/users.txt"; assert_contains "$out" "not under TARGET_SERVER_DIR"
+  assert_not_contains "$(tmux ls 2>&1 || true)" "verify:"; [ ! -s "$WORKDIR/docker.calls" ] || { echo "something started"; exit 1; }
 }
 test_verify_running_shows_progress_only() { _skip_no_tmux && return 0; _setup19
   tmux new-session -d -s verify "sleep 30"
