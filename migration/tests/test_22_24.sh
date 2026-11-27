@@ -1,0 +1,153 @@
+# Tests for 22-open-target.sh, 23-shutdown-source.sh, 24-archive-and-clean.sh (7z is a stub on PATH).
+_l22env() { cp tests/fixtures/test.env "$WORKDIR/l.env"; local kv; for kv in "$@"; do echo "$kv" >> "$WORKDIR/l.env"; done; }
+# 22 reads TARGET_RUNTIME_PROPERTIES ($WORKDIR/openmrs-runtime.properties in test.env): without the indexing line by default.
+_seed22() { printf 'a=b\n' > "$WORKDIR/openmrs-runtime.properties"; testdb.sh sql tgt_db "delete from users; delete from person"
+  testdb.sh sql tgt_db "insert into person(person_id,date_created,uuid,creator) values(1,now(),'u1',1),(2,now(),'u2',1),(3,now(),'u3',1),(4,now(),'u4',1);
+    insert into users(user_id,system_id,username,person_id,date_created,creator,uuid,retired,retire_reason,retired_by,date_retired) values
+    (11,'a','alice',1,now(),1,'x1',1,'Temp - migrating data',11,now()),
+    (12,'b','bob',2,now(),1,'x2',1,'Migrating from TestSource',11,now()),
+    (13,'c','carol',3,now(),1,'x3',1,'Left the clinic',11,now()),
+    (14,'d','dave',4,now(),1,'x4',0,null,null,null)"; }
+_stub7z() { mkdir -p "$WORKDIR/stub"
+  cat > "$WORKDIR/stub/7z" <<'STUB'
+#!/usr/bin/env bash
+echo "$*" >> "$WORKDIR/7z.argv"; pwd > "$WORKDIR/7z.pwd"
+for a; do case "$a" in *.7z) echo archive > "$a" ;; esac; done
+exit 0
+STUB
+  chmod +x "$WORKDIR/stub/7z"; rm -f "$WORKDIR/7z.argv"; export PATH="$WORKDIR/stub:$PATH"; }
+_retired22() { testdb.sh sql tgt_db "select group_concat(username order by username) from users where retired=1"; }
+
+test_open_target_refuses_on_no() { _seed22; _l22env
+  for ans in 'y\ny\ny\ny\nn\n' 'n\n' 'y\nmaybe\ny\ny\ny\n'; do
+    out=$(printf "$ans" | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 1 $? "$out"
+    assert_eq "alice,bob,carol" "$(_retired22)"
+  done
+}
+test_open_target_unretires_both_reasons_only() { _seed22; _l22env MIGRATION_MODE=real
+  out=$(printf 'y\ny\ny\ny\ny\ny\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
+  assert_eq "carol" "$(_retired22)"
+  assert_eq "Left the clinic" "$(testdb.sh sql tgt_db "select retire_reason from users where username='carol'")"
+  assert_eq "NULL|NULL|NULL" "$(testdb.sh sql tgt_db "select concat(ifnull(retire_reason,'NULL'),'|',ifnull(retired_by,'NULL'),'|',ifnull(date_retired,'NULL')) from users where username='alice'")"
+  assert_contains "$out" "1 users retired with reason 'Temp - migrating data'"
+  assert_contains "$out" "[43]"; assert_contains "$out" "[42]"; assert_contains "$out" "Next: 23-shutdown-source.sh"
+}
+test_open_target_zero_rows_skips_write() { _seed22; testdb.sh sql tgt_db "update users set retired=0 where retire_reason like 'Temp%' or retire_reason like 'Migrating%'"; _l22env
+  out=$(printf 'y\ny\ny\ny\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
+  assert_contains "$out" "0 users retired"; assert_not_contains "$out" "Proceed?"
+  assert_contains "$out" "0 is expected in test mode"
+}
+test_open_target_warns_when_flush_not_1() { _seed22; _l22env
+  testdb.sh sql tgt_db "set global innodb_flush_log_at_trx_commit=2"
+  out=$(printf 'y\ny\ny\ny\ny\ny\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); rc=$?
+  testdb.sh sql tgt_db "set global innodb_flush_log_at_trx_commit=1"
+  assert_eq 0 $rc "$out"; assert_contains "$out" "WARNING"; assert_contains "$out" "'2'"
+}
+test_shutdown_skipped_in_test_mode() { _l22env SOURCE_COMPOSE_DIR="$WORKDIR"
+  out=$(printf 'y\n' | ./23-shutdown-source.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
+  assert_contains "$out" "skipped in test mode"; assert_not_contains "$out" "Proceed?"
+}
+test_shutdown_runs_compose_down_with_setting() { mkdir -p "$WORKDIR/stub" "$WORKDIR/compose"
+  printf '#!/usr/bin/env bash\necho "$*" >> "$WORKDIR/dk.argv"\n' > "$WORKDIR/stub/mydocker"; chmod +x "$WORKDIR/stub/mydocker"; rm -f "$WORKDIR/dk.argv"
+  _l22env MIGRATION_MODE=real SOURCE_COMPOSE_DIR="$WORKDIR/compose" "SOURCE_DOCKER=$WORKDIR/stub/mydocker"
+  out=$(printf 'y\n' | ./23-shutdown-source.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
+  assert_eq "compose down" "$(cat "$WORKDIR/dk.argv")"; assert_contains "$out" "[41]"; assert_contains "$out" "Next: 24-archive-and-clean.sh"
+}
+
+# 24 with separate server dirs: S = source ($WORKDIR/srv24), T = target ($WORKDIR/tsrv24); the laptop keeps $WORKDIR.
+_seed24() { _stub7z; S="$WORKDIR/srv24"; T="$WORKDIR/tsrv24"
+  rm -rf "$S" "$T" "$WORKDIR/lists" "$WORKDIR/mappings"
+  mkdir -p "$S/exports" "$S/logs" "$S/lists" "$S/repo/src" "$T/exports/successful" "$T/logs" "$T/mappings" "$T/repo/src" "$T/patients-failed-pass1" "$WORKDIR/lists" "$WORKDIR/mappings"
+  : > "$S/repo/src/.env"; : > "$S/files-a.zip"; : > "$S/exports/p_patient.json"; : > "$S/lists/x.csv"; echo review > "$S/logs/source-data-review-TestSource.csv"
+  : > "$T/repo/src/.env"; : > "$T/files-a.zip"; : > "$T/exports/successful/p_patient.json"; : > "$T/mappings/user_mappings.csv"
+  : > "$T/logs/invalid-identifiers-TestSource.csv"; : > "$T/logs/app.log"
+  : > "$WORKDIR/lists/x.csv"; : > "$WORKDIR/mappings/user_mappings.csv"; }
+_l24env() { _l22env "SOURCE_SERVER_DIR=$WORKDIR/srv24" "TARGET_SERVER_DIR=$WORKDIR/tsrv24" "$@"; }
+_run24() { out=$(printf "$1" | ./24-archive-and-clean.sh "$WORKDIR/l.env" 2>&1); rc=$?; }
+
+test_clean_asks_about_invalid_identifiers_first() { _seed24; _l24env
+  _run24 'n\n'; assert_eq 1 $rc "$out"
+  assert_contains "$out" "invalid-identifiers"; assert_contains "$out" "not Jira"
+  [ -d "$T/exports" ] && [ -f "$T/logs/invalid-identifiers-TestSource.csv" ] && [ ! -e "$T/source-logs" ] || { echo "changed"; exit 1; }
+  [ ! -e "$WORKDIR/7z.argv" ] || { echo "7z ran"; exit 1; }
+}
+test_clean_archive_holds_exports_logs_source_logs_mappings() { _seed24; _l24env
+  _run24 'y\ny\ny\nn\n'; assert_eq 1 $rc "$out"
+  assert_contains "$out" "tar c -C $S/logs ."; assert_contains "$out" "tar x -C $T/source-logs"
+  assert_eq review "$(cat "$T/source-logs/source-data-review-TestSource.csv")"
+  assert_contains "$out" "7z a -p -mhe=on"; assert_contains "$out" "$T/TestSource-exports-"
+  assert_contains "$(cat "$WORKDIR/7z.argv")" ".7z exports logs source-logs mappings"
+  assert_eq "$T" "$(cat "$WORKDIR/7z.pwd")"
+  assert_contains "$out" "[46.2-46.3]"
+  [ -d "$T/exports" ] && [ -f "$T/files-a.zip" ] && [ -d "$S/logs" ] || { echo "deleted before backup confirmed"; exit 1; }
+  ls "$T"/TestSource-exports-*.7z >/dev/null
+}
+test_clean_source_logs_copy_declined_stops() { _seed24; _l24env
+  _run24 'y\nn\n'; assert_eq 1 $rc "$out"
+  [ ! -e "$WORKDIR/7z.argv" ] && [ -d "$S/logs" ] || { echo "went on"; exit 1; }
+}
+test_clean_without_source_logs_archives_the_rest() { _seed24; _l24env; rm -rf "$S/logs"
+  _run24 'y\ny\nn\n'; assert_eq 1 $rc "$out"
+  assert_contains "$out" "no logs folder on the source"
+  assert_contains "$(cat "$WORKDIR/7z.argv")" ".7z exports logs mappings"
+}
+test_clean_deletes_confirmed_things_keeps_archive() { _seed24; _l24env
+  _run24 'y\ny\ny\ny\ny\ny\ny\n'; assert_eq 0 $rc "$out"
+  for p in "$T/exports" "$T/logs" "$T/source-logs" "$T/mappings" "$T/repo/src/.env" "$T/files-a.zip" "$T/patients-failed-pass1" \
+           "$S/exports" "$S/logs" "$S/lists" "$S/repo/src/.env" "$S/files-a.zip" "$WORKDIR/lists" "$WORKDIR/mappings"; do
+    [ ! -e "$p" ] || { echo "$p still there"; exit 1; }
+  done
+  [ -d "$T/repo" ] && [ -d "$S/repo" ] || { echo "repo removed"; exit 1; }
+  ls "$T"/TestSource-exports-*.7z >/dev/null
+  assert_contains "$(cat "$WORKDIR/7z.argv")" "-p -mhe=on"; assert_contains "$out" "Migration steps complete."
+  assert_contains "$out" "Left on this laptop:"; assert_contains "$out" "The logs contain patient identifiers and usernames - delete them or keep them protected."
+  assert_not_contains "$out" "Next:"
+}
+test_clean_declined_deletion_keeps_files() { _seed24; _l24env
+  _run24 'y\ny\ny\ny\nn\n'; assert_eq 1 $rc "$out"
+  [ -d "$T/exports" ] && [ -d "$T/logs" ] && [ -d "$S/logs" ] || { echo "deleted although declined"; exit 1; }
+}
+test_clean_refuses_root_server_dir() { _seed24
+  for kv in SOURCE_SERVER_DIR=/ TARGET_SERVER_DIR=/ SOURCE_SERVER_DIR=; do
+    _l24env "$kv"
+    _run24 'y\ny\ny\ny\ny\ny\ny\n'
+    [ "$rc" -ne 0 ] || { echo "no refusal for $kv"; exit 1; }
+    [ -d "$T/exports" ] && [ -d "$S/exports" ] || { echo "deleted for $kv"; exit 1; }
+  done
+}
+test_clean_refuses_when_archive_exists() { _seed24; _l24env
+  : > "$T/TestSource-exports-$(date +%Y%m%d).7z"
+  _run24 'y\ny\ny\ny\ny\ny\ny\n'; assert_eq 2 $rc "$out"
+  assert_contains "$out" "already exists"; [ -d "$T/exports" ] && [ ! -e "$WORKDIR/7z.argv" ] && [ ! -e "$T/source-logs" ] || exit 1
+}
+
+test_open_target_banner_and_items() { _seed22; _l22env
+  out=$(printf 'y\ny\nn\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 1 $? "$out"
+  assert_contains "$out" "lets users log in to the TARGET (production in real mode)"
+  for w in "16 password hashes copied after the last 15 run" "17 import finished" "18 files copied" "19 verify output reviewed" "20 index rebuilt" "21 spot checks done"; do assert_contains "$out" "$w"; done
+  assert_eq "alice,bob,carol" "$(_retired22)"
+}
+test_open_target_flush_warning_before_confirm() { _seed22; _l22env
+  testdb.sh sql tgt_db "set global innodb_flush_log_at_trx_commit=2"
+  out=$(printf 'y\ny\ny\ny\ny\ny\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1)
+  testdb.sh sql tgt_db "set global innodb_flush_log_at_trx_commit=1"
+  w=${out%%WARNING*}; c=${out%%Proceed?*}
+  [ ${#w} -lt ${#c} ] || { echo "warning not before first confirm"; exit 1; }
+  r=${out%%\[43\]*}; [ ${#r} -lt ${#c} ] || { echo "reminders not before confirm"; exit 1; }
+}
+# I4: the 16 question, and no opening while 07's indexing line is still in the runtime properties (20 not done).
+test_open_target_asks_about_password_hashes() { _seed22; _l22env
+  out=$(printf 'n\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 1 $? "$out"
+  assert_contains "$out" "16: have the password hashes been copied after the last 15 run?"
+  assert_eq "alice,bob,carol" "$(_retired22)"
+}
+test_open_target_refuses_while_indexing_line_present() { _seed22; _l22env
+  printf 'a=b\nhibernate.search.indexing.listeners.enabled=false\n' > "$WORKDIR/openmrs-runtime.properties"
+  out=$(printf 'y\ny\ny\ny\ny\ny\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 1 $? "$out"
+  assert_contains "$out" "hibernate.search.indexing.listeners.enabled=false"; assert_contains "$out" "20-rebuild-index.sh"
+  assert_not_contains "$out" "Proceed?"; assert_eq "alice,bob,carol" "$(_retired22)"
+}
+test_open_target_refuses_when_properties_unreadable() { _seed22; _l22env; rm -f "$WORKDIR/openmrs-runtime.properties"
+  out=$(printf 'y\ny\ny\ny\ny\ny\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 2 $? "$out"
+  assert_contains "$out" "$WORKDIR/openmrs-runtime.properties"; assert_eq "alice,bob,carol" "$(_retired22)"
+}

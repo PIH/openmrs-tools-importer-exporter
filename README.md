@@ -1,6 +1,8 @@
 
 # PIH OpenMRS Importer - Exporter App
 
+To migrate a site's OpenMRS server into ZL Central, follow [migration/README.md](migration/README.md). It describes the numbered scripts in `migration/` (settings, test mode, every step in order, and the files they write). The rest of this file describes the importer and exporter themselves.
+
 ## Quick start
 
 ### Prerequisites
