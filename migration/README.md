@@ -183,8 +183,20 @@ Run these after both servers are locked, so users and concepts added on the day 
 - Do by hand: keep the backups off on the source (the cron entry stays disabled).
 - Check: the source containers are stopped.
 
-**24 `24-archive-and-clean.sh`** Asks whether `invalid-identifiers*.csv` was passed to the Haiti team through the usual channel (not Jira) [47]. Creates a password-protected 7z archive of the exports on the target (7z asks for the password on the server's terminal), asks whether it was copied to the backup location, then deletes the migration's leftovers from both servers and the laptop. [46] The archive is kept on the target.
+**24 `24-archive-and-clean.sh`** Asks whether `invalid-identifiers*.csv` was passed to the Haiti team through the usual channel (not Jira) [47]. Streams the source `logs/` (export console log, export-side `source-data-fixes` and `source-data-review` CSVs) through the laptop into `<TARGET_SERVER_DIR>/source-logs/` (confirmed). Creates a password-protected 7z archive `<SOURCE_NAME>-exports-<date>.7z` on the target holding `exports/`, `logs/` (importer and verifier logs, `app.log`, `visits-before-birthdate*`, `verify-users*`, `complex-obs-missing*`, `conflicts-*`, `invalid-identifiers*` and the other report CSVs), `source-logs/` and `mappings/` (7z asks for the password on the server's terminal). It asks whether the archive was copied to the backup location, then deletes the migration's leftovers from both servers and the laptop. [46] The archive is kept on the target.
 - Do by hand: copy the archive to the Azure backup; use the default backup password [46.2-46.3].
+
+**A later site into the same target** needs this site's exports and user mappings for `EARLIER_IMPORTS` (19 runs verifyUsers for them). Extract them from the archive under `TARGET_SERVER_DIR` on the target (the node container only sees that folder), for example for HSN:
+
+    mkdir -p <TARGET_SERVER_DIR>/earlier/HSN
+    cd <TARGET_SERVER_DIR>/earlier/HSN && 7z x <path>/HSN-exports-<date>.7z     # asks for the archive password
+    rm -rf logs source-logs                                                     # not needed for EARLIER_IMPORTS
+
+and set, in the later site's settings file:
+
+    EARLIER_IMPORTS='<TARGET_SERVER_DIR>/earlier/HSN/exports|<TARGET_SERVER_DIR>/earlier/HSN/mappings/user_mappings.csv|<HSN facility uuid>'
+
+The extracted folders hold patient and user data: delete them when that site's migration is done.
 
 ## Running a script again
 
@@ -227,7 +239,7 @@ Password hashes are never written on the laptop. At the end, 24 prints a "Left o
 | `repo/src/.env` | 12 | OpenMRS password for the importer (mode 600) | 24 |
 | `lists/*.csv` | 12 | uuids, **patient data** | 24 |
 | `exports/` | 13 | export JSON: **patient data and user data** | 24 (after the archive is made) |
-| `logs/` (`export-console.log`, importer logs, source-data-fixes and source-data-review CSVs) | 13 | **patient data** | 24 |
+| `logs/` (`export-console.log`, importer logs, source-data-fixes and source-data-review CSVs) | 13 | **patient data** | 24 (after it is copied to the target's `source-logs/` and archived) |
 | `files-<folder>.zip` | 18 | zip of complex obs, storage or person images: **patient data** | 24 |
 
 Also on the source, a docker image for node is pulled on the server, and a backup from 04 (outside the work folder).
@@ -237,12 +249,13 @@ Also on the source, a docker image for node is pulled on the server, and a backu
 | File | Written by | Contents | Deleted by |
 |---|---|---|---|
 | `repo/`, `repo/src/.env` | 12 | importer checkout, OpenMRS password (mode 600) | `.env` by 24 |
-| `mappings/` | 12 | mapping files from the laptop: **user data** | 24 |
+| `mappings/` | 12 | mapping files from the laptop: **user data** | 24 (after the archive is made) |
 | `exports/` | 14 | export JSON: **patient data and user data** | 24 (after the archive is made) |
-| `logs/` (console logs, importer logs, `conflicts-<folder>.csv`, `invalid-identifiers*.csv`, report CSVs) | 15, 17, 18, 19 | **patient data** | 24 |
+| `logs/` (console logs, importer logs, `conflicts-<folder>.csv`, `invalid-identifiers*.csv`, report CSVs) | 15, 17, 18, 19 | **patient data** | 24 (after the archive is made) |
+| `source-logs/` | 24 | copy of the source `logs/` for the archive: **patient data** | 24 (after the archive is made) |
 | `patients-failed-pass1/` | 17 | failed patient JSON between passes: **patient data** | 24 |
 | `files-<folder>.zip` | 18 | **patient data** | 24 |
-| `<SOURCE_NAME>-exports-<date>.7z` | 24 | encrypted export archive: **patient data** | kept (copy it to the backup) |
+| `<SOURCE_NAME>-exports-<date>.7z` | 24 | encrypted archive of `exports/`, `logs/`, `source-logs/`, `mappings/`: **patient data and user data** | kept (copy it to the backup) |
 
 Other changes on the target (not files in the work folder): backups (06), the runtime properties line (07, removed by 20), merged files in `TARGET_DATA_DIR` (18).
 

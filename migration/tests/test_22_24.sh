@@ -11,8 +11,7 @@ _seed22() { printf 'a=b\n' > "$WORKDIR/openmrs-runtime.properties"; testdb.sh sq
 _stub7z() { mkdir -p "$WORKDIR/stub"
   cat > "$WORKDIR/stub/7z" <<'STUB'
 #!/usr/bin/env bash
-echo "$*" >> "$WORKDIR/7z.argv"
-for last; do :; done
+echo "$*" >> "$WORKDIR/7z.argv"; pwd > "$WORKDIR/7z.pwd"
 for a; do case "$a" in *.7z) echo archive > "$a" ;; esac; done
 exit 0
 STUB
@@ -55,44 +54,71 @@ test_shutdown_runs_compose_down_with_setting() { mkdir -p "$WORKDIR/stub" "$WORK
   assert_eq "compose down" "$(cat "$WORKDIR/dk.argv")"; assert_contains "$out" "[41]"; assert_contains "$out" "Next: 24-archive-and-clean.sh"
 }
 
-_seed24() { _stub7z; rm -rf "$WORKDIR/exports" "$WORKDIR/logs-keep" "$WORKDIR/lists" "$WORKDIR/mappings" "$WORKDIR"/*.7z "$WORKDIR/files-a.zip" "$WORKDIR/patients-failed-pass1" "$WORKDIR/repo"
-  mkdir -p "$WORKDIR/exports" "$WORKDIR/lists" "$WORKDIR/mappings" "$WORKDIR/repo/src" "$WORKDIR/patients-failed-pass1"
-  : > "$WORKDIR/repo/src/.env"; : > "$WORKDIR/files-a.zip"; : > "$WORKDIR/exports/p.json"; : > "$WORKDIR/lists/x.csv"
-  : > "$WORKDIR/logs/invalid-identifiers-TestSource.csv"; }
+# 24 with separate server dirs: S = source ($WORKDIR/srv24), T = target ($WORKDIR/tsrv24); the laptop keeps $WORKDIR.
+_seed24() { _stub7z; S="$WORKDIR/srv24"; T="$WORKDIR/tsrv24"
+  rm -rf "$S" "$T" "$WORKDIR/lists" "$WORKDIR/mappings"
+  mkdir -p "$S/exports" "$S/logs" "$S/lists" "$S/repo/src" "$T/exports/successful" "$T/logs" "$T/mappings" "$T/repo/src" "$T/patients-failed-pass1" "$WORKDIR/lists" "$WORKDIR/mappings"
+  : > "$S/repo/src/.env"; : > "$S/files-a.zip"; : > "$S/exports/p_patient.json"; : > "$S/lists/x.csv"; echo review > "$S/logs/source-data-review-TestSource.csv"
+  : > "$T/repo/src/.env"; : > "$T/files-a.zip"; : > "$T/exports/successful/p_patient.json"; : > "$T/mappings/user_mappings.csv"
+  : > "$T/logs/invalid-identifiers-TestSource.csv"; : > "$T/logs/app.log"
+  : > "$WORKDIR/lists/x.csv"; : > "$WORKDIR/mappings/user_mappings.csv"; }
+_l24env() { _l22env "SOURCE_SERVER_DIR=$WORKDIR/srv24" "TARGET_SERVER_DIR=$WORKDIR/tsrv24" "$@"; }
+_run24() { out=$(printf "$1" | ./24-archive-and-clean.sh "$WORKDIR/l.env" 2>&1); rc=$?; }
 
-test_clean_asks_about_invalid_identifiers_first() { _seed24; _l22env
-  out=$(printf 'n\n' | ./24-archive-and-clean.sh "$WORKDIR/l.env" 2>&1); assert_eq 1 $? "$out"
+test_clean_asks_about_invalid_identifiers_first() { _seed24; _l24env
+  _run24 'n\n'; assert_eq 1 $rc "$out"
   assert_contains "$out" "invalid-identifiers"; assert_contains "$out" "not Jira"
-  [ -d "$WORKDIR/exports" ] && [ -f "$WORKDIR/logs/invalid-identifiers-TestSource.csv" ] || { echo "deleted"; exit 1; }
+  [ -d "$T/exports" ] && [ -f "$T/logs/invalid-identifiers-TestSource.csv" ] && [ ! -e "$T/source-logs" ] || { echo "changed"; exit 1; }
   [ ! -e "$WORKDIR/7z.argv" ] || { echo "7z ran"; exit 1; }
 }
-test_clean_stops_when_archive_not_copied() { _seed24; _l22env
-  out=$(printf 'y\ny\nn\n' | ./24-archive-and-clean.sh "$WORKDIR/l.env" 2>&1); assert_eq 1 $? "$out"
-  assert_contains "$out" "7z a -p -mhe=on"; assert_contains "$out" "$WORKDIR/TestSource-exports-"
+test_clean_archive_holds_exports_logs_source_logs_mappings() { _seed24; _l24env
+  _run24 'y\ny\ny\nn\n'; assert_eq 1 $rc "$out"
+  assert_contains "$out" "tar c -C $S/logs ."; assert_contains "$out" "tar x -C $T/source-logs"
+  assert_eq review "$(cat "$T/source-logs/source-data-review-TestSource.csv")"
+  assert_contains "$out" "7z a -p -mhe=on"; assert_contains "$out" "$T/TestSource-exports-"
+  assert_contains "$(cat "$WORKDIR/7z.argv")" ".7z exports logs source-logs mappings"
+  assert_eq "$T" "$(cat "$WORKDIR/7z.pwd")"
   assert_contains "$out" "[46.2-46.3]"
-  [ -d "$WORKDIR/exports" ] && [ -f "$WORKDIR/files-a.zip" ] || { echo "deleted before backup confirmed"; exit 1; }
-  ls "$WORKDIR"/TestSource-exports-*.7z >/dev/null
+  [ -d "$T/exports" ] && [ -f "$T/files-a.zip" ] && [ -d "$S/logs" ] || { echo "deleted before backup confirmed"; exit 1; }
+  ls "$T"/TestSource-exports-*.7z >/dev/null
 }
-test_clean_deletes_confirmed_things_keeps_archive() { _seed24; _l22env
-  out=$(printf 'y\ny\ny\ny\ny\ny\n' | ./24-archive-and-clean.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
-  for p in exports repo/src/.env files-a.zip lists mappings patients-failed-pass1; do [ ! -e "$WORKDIR/$p" ] || { echo "$p still there"; exit 1; }; done
-  [ -d "$WORKDIR/repo" ] || { echo "repo removed"; exit 1; }
-  ls "$WORKDIR"/TestSource-exports-*.7z >/dev/null
+test_clean_source_logs_copy_declined_stops() { _seed24; _l24env
+  _run24 'y\nn\n'; assert_eq 1 $rc "$out"
+  [ ! -e "$WORKDIR/7z.argv" ] && [ -d "$S/logs" ] || { echo "went on"; exit 1; }
+}
+test_clean_without_source_logs_archives_the_rest() { _seed24; _l24env; rm -rf "$S/logs"
+  _run24 'y\ny\nn\n'; assert_eq 1 $rc "$out"
+  assert_contains "$out" "no logs folder on the source"
+  assert_contains "$(cat "$WORKDIR/7z.argv")" ".7z exports logs mappings"
+}
+test_clean_deletes_confirmed_things_keeps_archive() { _seed24; _l24env
+  _run24 'y\ny\ny\ny\ny\ny\ny\n'; assert_eq 0 $rc "$out"
+  for p in "$T/exports" "$T/logs" "$T/source-logs" "$T/mappings" "$T/repo/src/.env" "$T/files-a.zip" "$T/patients-failed-pass1" \
+           "$S/exports" "$S/logs" "$S/lists" "$S/repo/src/.env" "$S/files-a.zip" "$WORKDIR/lists" "$WORKDIR/mappings"; do
+    [ ! -e "$p" ] || { echo "$p still there"; exit 1; }
+  done
+  [ -d "$T/repo" ] && [ -d "$S/repo" ] || { echo "repo removed"; exit 1; }
+  ls "$T"/TestSource-exports-*.7z >/dev/null
   assert_contains "$(cat "$WORKDIR/7z.argv")" "-p -mhe=on"; assert_contains "$out" "Migration steps complete."
   assert_contains "$out" "Left on this laptop:"; assert_contains "$out" "The logs contain patient identifiers and usernames - delete them or keep them protected."
   assert_not_contains "$out" "Next:"
 }
-test_clean_declined_deletion_keeps_files() { _seed24; _l22env
-  out=$(printf 'y\ny\ny\nn\n' | ./24-archive-and-clean.sh "$WORKDIR/l.env" 2>&1); assert_eq 1 $? "$out"
-  [ -d "$WORKDIR/exports" ] || { echo "deleted although declined"; exit 1; }
+test_clean_declined_deletion_keeps_files() { _seed24; _l24env
+  _run24 'y\ny\ny\ny\nn\n'; assert_eq 1 $rc "$out"
+  [ -d "$T/exports" ] && [ -d "$T/logs" ] && [ -d "$S/logs" ] || { echo "deleted although declined"; exit 1; }
 }
 test_clean_refuses_root_server_dir() { _seed24
   for kv in SOURCE_SERVER_DIR=/ TARGET_SERVER_DIR=/ SOURCE_SERVER_DIR=; do
-    _l22env "$kv"
-    out=$(printf 'y\ny\ny\ny\ny\ny\n' | ./24-archive-and-clean.sh "$WORKDIR/l.env" 2>&1); rc=$?
+    _l24env "$kv"
+    _run24 'y\ny\ny\ny\ny\ny\ny\n'
     [ "$rc" -ne 0 ] || { echo "no refusal for $kv"; exit 1; }
-    [ -d "$WORKDIR/exports" ] || { echo "deleted for $kv"; exit 1; }
+    [ -d "$T/exports" ] && [ -d "$S/exports" ] || { echo "deleted for $kv"; exit 1; }
   done
+}
+test_clean_refuses_when_archive_exists() { _seed24; _l24env
+  : > "$T/TestSource-exports-$(date +%Y%m%d).7z"
+  _run24 'y\ny\ny\ny\ny\ny\ny\n'; assert_eq 2 $rc "$out"
+  assert_contains "$out" "already exists"; [ -d "$T/exports" ] && [ ! -e "$WORKDIR/7z.argv" ] && [ ! -e "$T/source-logs" ] || exit 1
 }
 
 test_open_target_banner_and_items() { _seed22; _l22env
@@ -108,11 +134,6 @@ test_open_target_flush_warning_before_confirm() { _seed22; _l22env
   w=${out%%WARNING*}; c=${out%%Proceed?*}
   [ ${#w} -lt ${#c} ] || { echo "warning not before first confirm"; exit 1; }
   r=${out%%\[43\]*}; [ ${#r} -lt ${#c} ] || { echo "reminders not before confirm"; exit 1; }
-}
-test_clean_refuses_when_archive_exists() { _seed24; _l22env
-  : > "$WORKDIR/TestSource-exports-$(date +%Y%m%d).7z"
-  out=$(printf 'y\ny\ny\ny\ny\ny\n' | ./24-archive-and-clean.sh "$WORKDIR/l.env" 2>&1); assert_eq 2 $? "$out"
-  assert_contains "$out" "already exists"; [ -d "$WORKDIR/exports" ] && [ ! -e "$WORKDIR/7z.argv" ] || exit 1
 }
 # I4: the 16 question, and no opening while 07's indexing line is still in the runtime properties (20 not done).
 test_open_target_asks_about_password_hashes() { _seed22; _l22env
