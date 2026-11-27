@@ -51,6 +51,10 @@ for side in src tgt; do
   fi
 
   check "tmux $name" "installed" run_on "$side" "command -v tmux"
+  # python3: report CSV checks (13) and the file copy tools (18); git: the importer checkout (12).
+  check "python3 $name" "installed" run_on "$side" "command -v python3"
+  check "git $name" "installed" run_on "$side" "command -v git"
+  if [ "$side" = tgt ]; then check "7z target" "installed (24 makes the encrypted archive with it)" run_on tgt "command -v 7z"; fi
   if run_on "$side" "$docker image inspect $NODE_IMAGE" >/dev/null 2>&1; then
     ok "node image $name" "$NODE_IMAGE present"
   elif ( work_write_on "$side" "$docker pull $NODE_IMAGE" ); then
@@ -72,7 +76,9 @@ else
   n=$(tgt_sql "select count(*) from idgen_seq_id_gen where prefix = $(sql_quote "$DOSSIER_PREFIX")" 2>/dev/null) || n=""
   if [ -n "$n" ] && [ "$n" -ge 1 ] 2>/dev/null; then ok DOSSIER_PREFIX "$DOSSIER_PREFIX ($n row in target idgen_seq_id_gen)"; else problem DOSSIER_PREFIX "$DOSSIER_PREFIX has no row in target idgen_seq_id_gen"; fi
 fi
-if [ -n "${ORDER_NUMBER_PREFIX:-}" ]; then ok ORDER_NUMBER_PREFIX "$ORDER_NUMBER_PREFIX"; else problem ORDER_NUMBER_PREFIX "empty"; fi
+# The exporter refuses anything but letters and digits (exportPatients.js).
+if [[ ${ORDER_NUMBER_PREFIX:-} =~ ^[A-Za-z0-9]+$ ]]; then ok ORDER_NUMBER_PREFIX "$ORDER_NUMBER_PREFIX"
+else problem ORDER_NUMBER_PREFIX "'${ORDER_NUMBER_PREFIX:-}' must be letters and digits only, not empty (the exporter refuses anything else)"; fi
 for f in EXPORT_USER_ROLE_MAPPINGS_FILE EXPORT_PATIENT_IDENTIFIERS_MAPPINGS_FILE EXPORT_PROGRAM_WORKFLOW_STATE_MAPPINGS_FILE EXPORT_CONCEPT_NAME_MAPPINGS_FILE; do
   path=${!f:-}
   [ -n "$path" ] || continue

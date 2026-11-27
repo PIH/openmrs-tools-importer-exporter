@@ -23,7 +23,7 @@ The migration is run by a person with these scripts. Nothing here needs any othe
 
 ### Servers (source and target)
 
-- `docker`, `tmux`, `python3`, `git`.
+- `docker`, `tmux`, `python3`, `git` on both servers, and `7z` (p7zip) on the target (24 makes the encrypted archive with it). 01 checks all of them.
 - The ssh user can run `sudo` without a password (MySQL runs in a docker container, and the OpenMRS data folders are owned by tomcat).
 - A work folder owned by the ssh user, for example `/home/<you>/migration` (`SOURCE_SERVER_DIR` and `TARGET_SERVER_DIR`). The importer checkout, the export files, the mappings and the logs go there. Nothing is installed on the host: node runs in a docker container (`NODE_IMAGE`, pulled if missing) against a git checkout of this repo in `<SERVER_DIR>/repo`.
 - The servers must be able to reach github (for the checkout) and the docker registry (for the node image), or have both already.
@@ -93,7 +93,7 @@ Steps 00 to 02 can be run days earlier, and again on the day.
 **00 `00-create-settings.sh`** Create or edit the settings file (see Setup).
 - Check: open the file once and look at the values.
 
-**01 `01-preflight.sh`** Checks every setting against the servers: SSH to both, sudo, docker containers, MySQL reachable, databases exist, facility uuid exists on both sides, dossier prefix exists on the target, optional mapping files exist, `tmux` and the node image on both servers (offers to pull the image), free disk, PIH EMR versions of both sides side by side. [1]
+**01 `01-preflight.sh`** Checks every setting against the servers: SSH to both, sudo, docker containers, MySQL reachable, databases exist, facility uuid exists on both sides, dossier prefix exists on the target, optional mapping files exist, `ORDER_NUMBER_PREFIX` is letters and digits only (the exporter refuses anything else), `tmux`, `python3`, `git` and the node image on both servers (offers to pull the image), `7z` on the target, free disk, PIH EMR versions of both sides side by side. [1]
 - Check: every line says OK. Fix any PROBLEM in the settings file and run it again. Compare the two EMR versions.
 
 **02 `02-check-source-data.sh`** Read-only. Health Center attribute set on all source patients [2] and on the target [3]. Counts of data the migration does not carry over (both appointment types, conditions, diagnoses, notes, paper records) [4]. Providers without user accounts [18.3.1, as a count].
@@ -130,15 +130,16 @@ Run these after both servers are locked, so users and concepts added on the day 
 - Your decisions (a conflict resolved, an unmatched user mapped by hand) go in `WORKDIR/mappings/user_mappings.manual.csv` and `provider_mappings.manual.csv`, one line per source user or provider, in the importer's format `<source-uuid> <label>,<target-uuid>` (lines starting with `#` and blank lines are ignored). Never edit `user_mappings.csv` or `provider_mappings.csv`: every run of 09 rewrites them. 09 never writes the `.manual` files. On every run it merges them in: a manual line replaces the generated line for the same source uuid, and 09 prints how many manual lines it applied. A line in the wrong format, or a source uuid listed twice, stops 09 (exit 2). Run 09 again after editing a `.manual` file, then 12 to copy the result up.
 
 **10 `10-build-concept-name-mappings.sh`** Finds coded-value concept names used by source obs that do not exist by uuid on the target, and drafts a mapping line for each where the target has the same concept with the same text, locale and type. Writes `WORKDIR/mappings/concept_name_mappings.draft.csv`, `concept-names-no-candidate.csv` and `concept-mappings-voided-target.csv` (existing mapping lines whose target name is voided; only if `EXPORT_CONCEPT_NAME_MAPPINGS_FILE` is set). The mappings file itself is never changed. [19]
-- Check: review the draft and the other two files, then merge what you accept into the concept name mappings file and set `EXPORT_CONCEPT_NAME_MAPPINGS_FILE` to it.
+Source names the existing mappings file already maps are left out of the draft and the no-candidate list (the count is printed).
+- Check: review the draft and the other two files, then merge what you accept into the concept name mappings file and set `EXPORT_CONCEPT_NAME_MAPPINGS_FILE` to it. 10 prints the merge: an append of the draft to the existing file into `<file>.merged` (`awk 1`, which is `cat` that also ends a last line without a line break), and a duplicate-key check that must print nothing.
 
 **11 `11-build-lists.sh`** Builds the uuid lists the exporter works through: users, providers, non-voided patients, relationships. Writes `WORKDIR/lists/*.csv` (one uuid per line) and prints counts. [20]
 - Check: the counts look plausible for the site. Voided patients and relationships are left out.
 
 ### Export
 
-**12 `12-setup-servers.sh`** On each server: clones or updates the importer into `<SERVER_DIR>/repo`, runs `npm ci` in a docker container, writes the importer's `src/.env` (mode 600). Copies the lists up to the source and the mapping files up to the target. The OpenMRS passwords are typed here and never printed or logged.
-- Check: the two `.env` files shown look right (passwords are masked).
+**12 `12-setup-servers.sh`** On each server: clones or updates the importer into `<SERVER_DIR>/repo` at `REPO_REF`, runs `npm ci` in a docker container, writes the importer's `src/.env` (mode 600). Copies the lists up to the source and the mapping files up to the target. The OpenMRS passwords are typed here and never printed or logged. When `REPO_REF` is a branch, an existing checkout is moved forward to the latest commit; if that is not possible (local commits or changes in the checkout), the step fails. It prints the commit that will run on each server. It stops before changing anything when two mapping files have the same file name (they would overwrite each other in `<TARGET_SERVER_DIR>/mappings`).
+- Check: the two `.env` files shown look right (passwords are masked), and the commit shown for each server is the one you expect.
 
 **13 `13-export.sh`** On the source, in tmux session `export`: exportUsers, exportProviders, exportPatients, exportRelationships. [21-25] Before the first start it saves object counts of both databases and per-table counts of the target in `WORKDIR/counts/` [26] (existing snapshots are kept). It asks before clearing old exports and logs. It returns at once. Run it again to see progress.
 - Check: the session has ended and the "Export summary" lines show no failures. If there are failures, run it again: it retries only the failures.
@@ -229,7 +230,7 @@ Run 16 right after 15, and again after any later 15 pass that created more users
 | `counts/*.txt` (object counts, table counts) | 13, 19 | counts only | not deleted by 24; delete or protect by hand |
 | `target-users-before-import.txt` | 15 | uuids of target users, **user data** | not deleted by 24; delete or protect by hand |
 
-Password hashes are never written on the laptop. At the end, 24 prints a "Left on this laptop" list of the logs, counts, `target-users-before-import.txt` and the settings file. It deletes none of them.
+Everything the scripts create (here and, for `TARGET_HOST=local`, on this machine) is readable by you only: `load_settings` sets `umask 077`. Password hashes are never written on the laptop. At the end, 24 prints a "Left on this laptop" list of the logs, counts, `target-users-before-import.txt` and the settings file. It deletes none of them.
 
 ### Source server (`SOURCE_SERVER_DIR`)
 

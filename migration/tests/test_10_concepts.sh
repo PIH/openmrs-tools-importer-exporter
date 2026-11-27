@@ -85,7 +85,8 @@ test_existing_mapping_to_voided_name_flagged() { _clear10; _pair10
   assert_contains "$v" "$(_nu 11),$(_nu 21),voided"
   assert_contains "$v" "$(_nu 12),$(_nu 99),missing"
   assert_not_contains "$v" "$(_nu 13)"
-  assert_contains "$out" "sort -u $WORKDIR/existing.csv"
+  assert_contains "$out" "awk 1 $WORKDIR/existing.csv $WORKDIR/mappings/concept_name_mappings.draft.csv > $WORKDIR/existing.csv.merged"
+  assert_not_contains "$out" "sort -u"
 }
 test_mappings_file_not_modified() { _clear10; _pair10
   _name10 src_db 11 1 Tri en FULLY_SPECIFIED; _obs10 src_db 11; _name10 tgt_db 21 1 Tri en FULLY_SPECIFIED
@@ -112,4 +113,22 @@ test_prompt_auth_both_sides() { _clear10; _pair10
   out=$(MIGRATION_PROMPT_PW_FILE="$WORKDIR/pw" ./10-build-concept-name-mappings.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
   assert_contains "$(_m10 concept_name_mappings.draft.csv)" "$(_nu 11) Tri,$(_nu 21)"
   assert_not_contains "$out" "pw-9f3k"
+}
+# M1: names the existing mappings file already maps are left out of the draft and the no-candidate list.
+test_names_already_mapped_left_out() { _clear10; _pair10
+  _name10 src_db 11 1 Tri en FULLY_SPECIFIED; _obs10 src_db 11; _name10 tgt_db 21 1 Tri en FULLY_SPECIFIED
+  _name10 src_db 12 1 Lone en FULLY_SPECIFIED; _obs10 src_db 12
+  _name10 src_db 13 1 New en FULLY_SPECIFIED; _obs10 src_db 13; _name10 tgt_db 23 1 New en FULLY_SPECIFIED
+  printf '%s\n' "$(_nu 11) Tri,$(_nu 21)" "$(_nu 12) Lone,$(_nu 21)" > "$WORKDIR/existing.csv"
+  _env10; echo "EXPORT_CONCEPT_NAME_MAPPINGS_FILE=$WORKDIR/existing.csv" >> "$WORKDIR/l.env"
+  out=$(./10-build-concept-name-mappings.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
+  assert_eq "$(_nu 13) New,$(_nu 23)" "$(_m10 concept_name_mappings.draft.csv)"
+  assert_not_contains "$(_m10 concept-names-no-candidate.csv)" "$(_nu 12)"
+  assert_contains "$out" "names already in the existing mappings file (left out): 2"
+  # the printed merge appends and checks for duplicate keys
+  merge=$(printf '%s\n' "$out" | grep -F "> $WORKDIR/existing.csv.merged")
+  ( cd "$WORKDIR" && eval "$merge" ) >"$WORKDIR/merge.out" 2>&1; assert_eq 0 $? "$(cat "$WORKDIR/merge.out")"
+  dupcheck=$(printf '%s\n' "$out" | grep -F "uniq -d"); assert_eq "" "$(eval "${dupcheck%%#*}")"
+  assert_eq 3 "$(wc -l < "$WORKDIR/existing.csv.merged" | tr -d ' ')"
+  assert_eq "$(_nu 11) Tri,$(_nu 21)" "$(head -n 1 "$WORKDIR/existing.csv.merged")"
 }

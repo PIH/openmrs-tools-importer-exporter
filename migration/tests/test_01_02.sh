@@ -71,3 +71,23 @@ test_providers_without_user_and_reminders() { _seed12; _env12
   assert_contains "$out" "providers whose person has no user: 1"
   assert_contains "$out" "ID/card printing"; assert_contains "$out" "CommCare"; assert_contains "$out" "ETL"
 }
+# I7: python3 and git on both servers, 7z on the target.
+test_preflight_checks_python3_git_7z() { _seed12; _env12
+  out=$(_pf); assert_eq 0 $? "$out"
+  for c in "python3 source" "git source" "python3 target" "git target" "7z target"; do assert_contains "$out" "OK       $c"; done
+  assert_not_contains "$out" "7z source"
+}
+# PATH without 7z (everything else linked): the target check is a PROBLEM.
+test_preflight_missing_7z_is_problem() { _seed12; _env12
+  local d="$WORKDIR/no7z" f
+  if [ ! -d "$d" ]; then mkdir -p "$d"; for f in /usr/local/bin/* /usr/bin/* /bin/*; do [ "$(basename "$f")" = 7z ] || ln -sf "$f" "$d/" 2>/dev/null; done; fi
+  out=$(PATH="$d" ./01-preflight.sh "$WORKDIR/t.env" </dev/null 2>&1); assert_eq 1 $? "$out"
+  assert_contains "$out" "PROBLEM  7z target"
+}
+# m7: the exporter refuses an ORDER_NUMBER_PREFIX with anything but letters and digits.
+test_preflight_order_number_prefix_letters_digits_only() { _seed12
+  for v in 'T-S' 'T S' 'TS_'; do _env12 "ORDER_NUMBER_PREFIX='$v'"
+    out=$(_pf); assert_eq 1 $? "$out ($v)"; assert_contains "$out" "PROBLEM  ORDER_NUMBER_PREFIX"
+  done
+  _env12 ORDER_NUMBER_PREFIX=Ts9; out=$(_pf); assert_eq 0 $? "$out"; assert_contains "$out" "OK       ORDER_NUMBER_PREFIX"
+}

@@ -38,6 +38,15 @@ if [ -n "$missing" ]; then
   echo "Missing files (run steps 09-11 first, or fix the settings):$missing" >&2
   exit 2
 fi
+# All mapping files land in <TARGET_SERVER_DIR>/mappings under their own file name: two with the same name would
+# overwrite each other.
+names="user_mappings.csv provider_mappings.csv"
+for s in $optional_map_settings; do [ -z "${!s:-}" ] || names="$names $(basename "${!s}")"; done
+dups=$(printf '%s\n' $names | sort | uniq -d | tr '\n' ' ')
+if [ -n "$dups" ]; then
+  echo "Mapping files with the same file name ($dups) would overwrite each other in $TARGET_SERVER_DIR/mappings; rename one (settings: user_mappings.csv and provider_mappings.csv are 09's, plus $optional_map_settings). Nothing changed." >&2
+  exit 2
+fi
 
 # _ask_pw side: reads the OpenMRS password for that side with read -s (nothing echoed or logged) into
 # src_pw / tgt_pw. MIGRATION_PROMPT_PW_FILE (harness only): line 1 = source, line 2 = target.
@@ -54,15 +63,15 @@ _ask_pw() {
   if [ "$side" = src ]; then src_pw=$pw; else tgt_pw=$pw; fi
 }
 
-# _dq VALUE: VALUE as a dotenv value: bare if it only has safe characters, else quoted with whichever
-# of ' " ` it does not contain. Returns 2 (with a message) for a value that can't be written.
+# _dq VALUE: VALUE as a dotenv value: bare if it only has safe characters, else quoted with the first of ' ` " it does
+# not contain (double quotes last: dotenv expands \n inside them). Returns 2 (with a message) for a value that can't be written.
 _dq() {
   local v=$1
   case "$v" in *$'\n'*|*$'\r'*) echo "A value with a line break can't go in a .env file" >&2; return 2 ;; esac
   if [[ $v =~ ^[A-Za-z0-9_./:@%+=,-]+$ ]]; then printf '%s' "$v"
   elif [[ $v != *"'"* ]]; then printf "'%s'" "$v"
-  elif [[ $v != *'"'* ]]; then printf '"%s"' "$v"
   elif [[ $v != *'`'* ]]; then printf '`%s`' "$v"
+  elif [[ $v != *'"'* ]]; then printf '"%s"' "$v"
   else echo "A value containing ', \" and \` can't go in a .env file" >&2; return 2; fi
 }
 
@@ -121,11 +130,13 @@ _setup() {
   echo; echo "--- $label server: $dir ---"
 
   if run_on "$side" "test -d $qrepo/.git"; then
-    # The merge only moves a checked-out branch forward; on a tag or commit (no upstream) it does nothing.
-    _work "$side" "git -C $qrepo fetch --tags && git -C $qrepo checkout $qref && { git -C $qrepo merge --ff-only '@{u}' >/dev/null 2>&1 || true; }"
+    # On a branch, the merge moves it forward to the fetched commit and fails the step if it can't (local changes or
+    # commits); on a tag or commit (detached HEAD) there is nothing to merge.
+    _work "$side" "git -C $qrepo fetch --tags && git -C $qrepo checkout $qref && if git -C $qrepo symbolic-ref -q HEAD >/dev/null; then git -C $qrepo merge --ff-only '@{u}'; fi"
   else
     _work "$side" "mkdir -p $qdir && git clone $qurl $qrepo && git -C $qrepo checkout $qref"
   fi
+  echo "Commit to run on the $label server: $(run_on "$side" "git -C $qrepo log -1 --oneline")"
 
   if [ "${MIGRATION_UNDER_TEST:-}" = 1 ] && [ "${SKIP_NPM_CI:-}" = true ]; then
     echo "npm ci skipped (SKIP_NPM_CI, test harness)"

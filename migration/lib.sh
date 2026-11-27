@@ -58,6 +58,8 @@ load_settings() {
   # Prompt once, up front, in this shell (a later $(src_sql ...) subshell could not keep the answer).
   [ "$SOURCE_MYSQL_AUTH" != prompt ] || _load_mysql_pw src
   [ "$TARGET_MYSQL_AUTH" != prompt ] || _load_mysql_pw tgt
+  # Logs, lists and mappings hold usernames and patient identifiers: everything the scripts create here is private.
+  umask 077
   mkdir -p "$WORKDIR/logs"
   _SCRIPT_NAME=$(basename "$0")
   exec > >(tee -a "$WORKDIR/logs/${_SCRIPT_NAME}.$(date +%Y%m%d-%H%M%S).log") 2>&1

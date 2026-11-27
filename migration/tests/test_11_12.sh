@@ -154,3 +154,28 @@ ENVEOF
   _run12; assert_eq 2 $rc "$out"; assert_contains "$out" "ORDER_NUMBER_PREFIX"
   [ ! -e "$WORKDIR/srv" ] || { echo "something was written before stopping"; exit 1; }
 }
+# M2: two mapping files with the same name would overwrite each other in <TARGET_SERVER_DIR>/mappings.
+test_duplicate_mapping_basenames_refused_before_any_change() { _setup12
+  mkdir -p "$WORKDIR/a" "$WORKDIR/b"; echo x > "$WORKDIR/a/m.csv"; echo y > "$WORKDIR/b/m.csv"; echo z > "$WORKDIR/a/user_mappings.csv"
+  for pair in "EXPORT_USER_ROLE_MAPPINGS_FILE=$WORKDIR/a/m.csv EXPORT_CONCEPT_NAME_MAPPINGS_FILE=$WORKDIR/b/m.csv" "EXPORT_CONCEPT_NAME_MAPPINGS_FILE=$WORKDIR/a/user_mappings.csv"; do
+    _setup12; for kv in $pair; do echo "$kv" >> "$WORKDIR/l.env"; done
+    _run12; assert_eq 2 $rc "$out ($pair)"; assert_contains "$out" "same file name"; assert_not_contains "$out" "Proceed?"
+    [ ! -e "$WORKDIR/srv" ] && [ ! -e "$WORKDIR/tsrv" ] || { echo "changed something ($pair)"; exit 1; }
+  done
+}
+# M3: a branch that cannot be fast-forwarded fails the step; the commit that will run is shown on each server.
+test_branch_not_fast_forward_fails() { _setup12
+  _run12; assert_eq 0 $rc "$out"
+  local sha; sha=$(git -C "$WORKDIR/origin" log -1 --format=%h)
+  assert_contains "$out" "Commit to run on the source server: $sha"; assert_contains "$out" "Commit to run on the target server: $sha"
+  git -C "$WORKDIR/srv/repo" -c user.name=t -c user.email=t@x commit -q --allow-empty -m local
+  echo two > "$WORKDIR/origin/src/a.js"; git -C "$WORKDIR/origin" -c user.name=t -c user.email=t@x commit -qam two
+  _run12; [ "$rc" -ne 0 ] || { echo "diverged branch not reported: $out"; exit 1; }
+  assert_not_contains "$out" "Next:"
+}
+# m4: dotenv expands \n inside double quotes, not inside backticks: backticks are tried first.
+test_dotenv_value_prefers_backticks_over_double_quotes() { _setup12
+  printf '%s\ntgt\n' "a'b\\nc" > "$WORKDIR/pw"
+  _run12; assert_eq 0 $rc "$out"
+  assert_contains "$(cat "$WORKDIR/srv/repo/src/.env")" "OPENMRS_SOURCE_PASSWORD=\`a'b\\nc\`"
+}

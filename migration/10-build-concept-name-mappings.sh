@@ -4,7 +4,8 @@
 # Same mechanics as step 09: one target mysql session receives, through the laptop, a temporary table
 # with the concept names the source's non-voided obs use as coded values, and runs the matching
 # queries; the laptop only splits what the target prints into the files in $WORKDIR/mappings/.
-# If EXPORT_CONCEPT_NAME_MAPPINGS_FILE is set and exists, its target uuids are checked too.
+# If EXPORT_CONCEPT_NAME_MAPPINGS_FILE is set and exists, its target uuids are checked too, and the source names it
+# already maps are left out of the draft and the no-candidate list (the draft can then simply be appended to it).
 # That file is never modified. Only temporary tables are created, so nothing is confirmed or changed.
 set -euo pipefail
 here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
@@ -43,7 +44,8 @@ create temporary table old_map(s_uuid varchar(100) $cs, t_uuid varchar(100) $cs)
 # MySQL 5.6, hence the many small steps.
 tail_sql="${existing_inserts}create temporary table tgt_n as select n.uuid, n.name, n.locale, n.concept_name_type ntype, n.voided, c.uuid concept_uuid from concept_name n join concept c on c.concept_id = n.concept_id;
 create temporary table tgt_ok as select * from tgt_n where voided = 0;
-create temporary table missing_n as select * from src_names where uuid not in (select uuid from tgt_n);
+create temporary table missing_n as select * from src_names where uuid not in (select uuid from tgt_n) and uuid not in (select s_uuid from old_map);
+select 'MAPPED', count(*) from src_names where uuid in (select s_uuid from old_map);
 create temporary table cand(s_uuid char(38) $cs, t_uuid char(38) $cs);
 create temporary table ccount(s_uuid char(38) $cs, n int);
 insert into cand select s.uuid, t.uuid from missing_n s join tgt_ok t on t.concept_uuid = s.concept_uuid and t.name = s.name and t.locale = s.locale and t.ntype <=> s.ntype;
@@ -74,13 +76,17 @@ counts=$(pipe_src_to_tgt "$(mysql_cmd src "$flags")" "$(mysql_cmd tgt "$flags")"
     $1 == "DRAFT"  { print $2 " " $3 "," $4 > dr; nd++ }
     $1 == "NOCAND" { print csv($2) "," csv($3) "," csv($4) "," csv($5) "," csv($6) "," $7 "," $8 > nc; nn++ }
     $1 == "OLDMAP" { print csv($2) "," csv($3) "," $4 > vt; nv++ }
-    END { printf "draft mappings (exactly one candidate): %d\nnames without exactly one candidate: %d\nexisting mappings to missing or voided target names: %d\n", nd, nn, nv }')
+    $1 == "MAPPED" { nm = $2 }
+    END { printf "draft mappings (exactly one candidate): %d\nnames without exactly one candidate: %d\nexisting mappings to missing or voided target names: %d\nnames already in the existing mappings file (left out): %d\n", nd, nn, nv, nm }')
 printf '%s\n' "$counts"
 echo "Files in $map_dir: concept_name_mappings.draft.csv (importer format), concept-names-no-candidate.csv, concept-mappings-voided-target.csv"
 echo "Read the two review files: names without a candidate and existing mappings to voided or missing names need a decision."
 if [ -n "$existing" ] && [ -f "$existing" ]; then
-  echo "Existing mappings file $existing is not modified. After review, to merge the draft into a new file:"
-  echo "  sort -u $existing $draft > $existing.merged"
+  q_ex=$(printf '%q' "$existing"); q_dr=$(printf '%q' "$draft")
+  echo "Existing mappings file $existing is not modified. After review, to append the draft to it in a new file"
+  echo "(awk 1 is cat that also ends a last line without a line break), then check that no source uuid is there twice:"
+  echo "  awk 1 $q_ex $q_dr > $q_ex.merged"
+  echo "  awk '{print \$1}' $q_ex.merged | sort | uniq -d    # must print nothing"
 else
   echo "No existing concept name mappings file (EXPORT_CONCEPT_NAME_MAPPINGS_FILE). After review, set it to the draft or a copy of it."
 fi
