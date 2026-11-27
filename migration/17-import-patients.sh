@@ -52,6 +52,7 @@ if tmux_running tgt import-users; then
   echo "The user import is still running (tmux session 'import-users' on the target server). Wait for it to end (15-import-users.sh shows progress)." >&2
   exit 1
 fi
+refuse_while_running tgt "the verification must not run during the import (19-verify.sh shows its progress)" verify
 
 # Start another pass (or the first one): called after the previous run's marker/console log were handled.
 restart_needed=0

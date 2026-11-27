@@ -89,6 +89,8 @@ if tmux_running tgt verify; then
   exit 0
 fi
 
+refuse_while_running tgt "the verification needs the import to have ended (15-import-users.sh / 17-import-patients.sh show progress)" import-users import-patients
+
 restart_needed=0
 if run_on tgt "[ -f $q_done ]"; then
   echo "The verification has finished. Summary:"

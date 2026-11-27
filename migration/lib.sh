@@ -290,6 +290,30 @@ lock_users() {
 
 tmux_running() { run_on "$1" "tmux has-session -t =$2" >/dev/null 2>&1; }
 
+# refuse_while_running tgt|src WHY SESSION...: exits 1 naming the first of the tmux SESSIONs running on that server.
+refuse_while_running() {
+  local side=$1 why=$2 s; shift 2
+  for s in "$@"; do
+    if tmux_running "$side" "$s"; then
+      echo "tmux session '$s' is still running on the $side server: $why. Wait for it to end (attach with: tmux attach -t $s). Nothing changed." >&2
+      exit 1
+    fi
+  done
+}
+
+# target_property_line LINE: is LINE (a whole line) in TARGET_RUNTIME_PROPERTIES on the target? Read with
+# TARGET_FILE_SUDO. Returns 0 = there, 1 = not there, 2 = could not read the file (missing, unreadable, sudo or ssh
+# failed). A sentinel proves grep itself ran: a failing sudo/ssh also exits 1, like grep's "no match".
+target_property_line() {
+  local file probe out rc
+  file="'${TARGET_RUNTIME_PROPERTIES:?TARGET_RUNTIME_PROPERTIES not set}'"
+  probe="grep -qxF '$1' $file; echo \"grep-rc=\$?\""
+  out=$(run_on tgt "${TARGET_FILE_SUDO:-} sh -c $(printf '%q' "$probe")" 2>/dev/null || true)
+  rc=$(printf '%s\n' "$out" | sed -n 's/^grep-rc=\([0-9][0-9]*\)$/\1/p')
+  [ "$(printf '%s\n' "$rc" | grep -c .)" = 1 ] || rc=unknown
+  case "$rc" in 0) return 0 ;; 1) return 1 ;; *) return 2 ;; esac
+}
+
 # start_in_tmux src|tgt SESSION work|cmd CMD: prints CMD, confirms, starts it detached; refuses if
 # SESSION is already running. kind "cmd" (database/service changes) is refused on src in test mode;
 # "work" (only reads the DB and writes files under *_SERVER_DIR, e.g. export) is allowed.

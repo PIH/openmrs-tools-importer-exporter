@@ -156,7 +156,7 @@ Run these after both servers are locked, so users and concepts added on the day 
 **16 `16-copy-password-hashes.sh`** Copies password hash and salt from the source to the target, for the users the import created only (not users that were mapped to existing accounts). Prints only how many rows it changed, never the rows. Nothing is written to disk on the laptop. (HAI-1314; replaces the "temporary until HAI-1314" steps 8.2/8.3.)
 - Check: the count equals the number of users the import created. Users that failed to import have no hash.
 
-**17 `17-import-patients.sh`** On the target, in tmux session `import-patients`: importProviders, importPatients, importPatients again (second pass retries the failures), importRelationships. [29-31] Returns at once. Run it again to see progress and the failure classes. Run it once more after the import ended: it sets `innodb_flush_log_at_trx_commit` back to 1 [32] and offers another pass (answer `n` if done).
+**17 `17-import-patients.sh`** On the target, in tmux session `import-patients`: importProviders, importPatients, importPatients again (second pass retries the failures), importRelationships. [29-31] Returns at once. Run it again to see progress and the failure classes. Run it once more after the import ended: it sets `innodb_flush_log_at_trx_commit` back to 1 [32] and offers another pass (answer `n` if done). It refuses to start while `import-users` (15) or `verify` (19) is running.
 - Check: flush is 1; the failed count and the failure classes.
 
 **18 `18-copy-files.sh`** Copies the data folders in `COPY_DIRS` (default `complex_obs storage person_images`, each only if it exists) from the source to the target, with `tools/create_archive.py` and `tools/merge_extract.py` (existing files are kept, conflicts go to a CSV), then sets the owner. [33] The export leaves complex obs files out; this step copies them.
@@ -164,10 +164,10 @@ Run these after both servers are locked, so users and concepts added on the day 
 
 ### Check
 
-**19 `19-verify.sh`** On the target, in tmux session `verify`: verifyPatients, verifyRelationships, verifyUsers, verifyComplexObs, then verifyUsers again for each entry of `EARLIER_IMPORTS`. [34, 37] A failing verifier does not stop the next. Run it again to see progress. Run it once more after it ended: it prints the table-count differences against the snapshot from 13 [35], the object counts before and after, and the row counts of the report CSVs (source-data-fixes, source-data-review, visits-before-birthdate, invalid-identifiers).
+**19 `19-verify.sh`** On the target, in tmux session `verify`: verifyPatients, verifyRelationships, verifyUsers, verifyComplexObs, then verifyUsers again for each entry of `EARLIER_IMPORTS`. [34, 37] A failing verifier does not stop the next. It refuses to start while `import-users` (15) or `import-patients` (17) is running. Run it again to see progress. Run it once more after it ended: it prints the table-count differences against the snapshot from 13 [35], the object counts before and after, and the row counts of the report CSVs (source-data-fixes, source-data-review, visits-before-birthdate, invalid-identifiers).
 - Check: read the numbers. The script prints, you judge: failed patients, table count changes, complex obs files that cannot be fetched, rows in the report files.
 
-**20 `20-rebuild-index.sh`** Removes the indexing line added by 07, restarts the target, waits, and rebuilds the search index with a synchronous call (asks for the migrating user's OpenMRS password). [36]
+**20 `20-rebuild-index.sh`** Removes the indexing line added by 07, restarts the target, waits, and rebuilds the search index with a synchronous call (asks for the migrating user's OpenMRS password). [36] It refuses, with nothing changed, while `import-users`, `import-patients` or `verify` is running on the target, and until 17 and 19 have finished (`logs/import-patients.done` and `logs/verify.done` in `TARGET_SERVER_DIR`).
 - Check: a patient search in the target UI finds a migrated patient.
 
 **21 `21-spot-checks.sh`** Read-only. Patients per Health Center value on the target, with the source facility marked [38]. Asks for dossier numbers and searches each through REST (prints uuid and identifier only) [39].
@@ -175,7 +175,7 @@ Run these after both servers are locked, so users and concepts added on the day 
 
 ### Open the server
 
-**22 `22-open-target.sh`** The step that lets users in. Run it only when everything above is done and checked. It asks whether 17, 18, 19, 20 and 21 are finished and reviewed (anything but yes stops with nothing changed). Then it un-retires users retired by this migration only: reason `Temp - migrating data` and `Migrating from <SOURCE_NAME>` [40]. Users retired for any other reason stay retired. It warns if `innodb_flush_log_at_trx_commit` is not 1. (Un-retiring is SQL in this script until the importer does it.)
+**22 `22-open-target.sh`** The step that lets users in. Run it only when everything above is done and checked. It refuses, with nothing changed, while the indexing line added by 07 (`hibernate.search.indexing.listeners.enabled=false`) is still in `TARGET_RUNTIME_PROPERTIES` (run 20 first), or when it cannot read that file. It asks whether 16 (password hashes copied after the last 15 run), 17, 18, 19, 20 and 21 are finished and reviewed (anything but yes stops with nothing changed). Then it un-retires users retired by this migration only: reason `Temp - migrating data` and `Migrating from <SOURCE_NAME>` [40]. Users retired for any other reason stay retired. It warns if `innodb_flush_log_at_trx_commit` is not 1. (Un-retiring is SQL in this script until the importer does it.)
 - Do by hand: re-enable backups in cron on the target and run one [42]. Re-enable 2FA for the migrating user [43].
 - Check: users can log in to the target, flush is 1, a backup ran, 2FA is on.
 

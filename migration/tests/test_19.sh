@@ -110,3 +110,12 @@ test_verify_renames_csvs_with_site_idempotent() { _skip_no_tmux && return 0; _se
   assert_eq "" "$(ls "$l" | grep 'TestSource-TestSource' || true)"
   assert_contains "$out" "source-data-fixes-TestSource.csv: 2 rows"
 }
+# I3: 19 does not start while an import runs.
+test_verify_refuses_while_import_runs() { _skip_no_tmux && return 0
+  for s in import-users import-patients; do _setup19
+    tmux new-session -d -s "$s" "sleep 30"
+    _run19 $'y\n'; assert_eq 1 $rc "$out ($s)"; assert_contains "$out" "'$s'"; assert_not_contains "$out" "Proceed?"
+    [ ! -e "$WORKDIR/docker.calls" ] || { echo "started"; exit 1; }
+    _cleanup19
+  done
+}

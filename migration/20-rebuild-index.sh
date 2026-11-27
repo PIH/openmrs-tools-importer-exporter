@@ -1,6 +1,8 @@
 #!/usr/bin/env bash
 # Step 20: switch search indexing back on and rebuild the search index on the target (HAI-1309).
 #   20-rebuild-index.sh [settings-file]
+# Refuses (nothing changed) while tmux session import-users, import-patients or verify runs on the target, and unless
+# 17 and 19 have finished (logs/import-patients.done and logs/verify.done in TARGET_SERVER_DIR).
 # 1. removes hibernate.search.indexing.listeners.enabled=false (added by step 07) from TARGET_RUNTIME_PROPERTIES,
 # 2. restarts the target and waits until it answers,
 # 3. asks for the migrating user's OpenMRS password and rebuilds the index with a synchronous POST
@@ -12,7 +14,16 @@ source "$here/lib.sh"
 load_settings "${1:-}"
 step_header 20 "rebuild the search index"
 require_settings TARGET_RUNTIME_PROPERTIES TARGET_RESTART_CMD TARGET_WAIT_URL TARGET_OPENMRS_URL MIGRATING_USERNAME \
-  TARGET_MYSQL_CONTAINER TARGET_DB
+  TARGET_MYSQL_CONTAINER TARGET_DB TARGET_SERVER_DIR
+
+# The restart would cut a running import or verification short, and indexing must stay off until both have ended.
+refuse_while_running tgt "the target must not be restarted and re-indexed during the import or the verification" import-users import-patients verify
+for marker in import-patients.done verify.done; do
+  if ! run_on tgt "[ -f $(printf '%q' "$TARGET_SERVER_DIR/logs/$marker") ]"; then
+    echo "$TARGET_SERVER_DIR/logs/$marker is missing on the target: run 17-import-patients.sh and 19-verify.sh to the end first (each writes its marker when it has finished). Nothing changed." >&2
+    exit 1
+  fi
+done
 
 sudo_prefix=${TARGET_FILE_SUDO:-}
 q() { printf "'%s'" "$1"; }
@@ -21,15 +32,11 @@ prop=hibernate.search.indexing.listeners.enabled=false
 
 # 1 + 2. Remove the property and restart (nothing to do if step 07's line is not there).
 echo "--- Part 1: indexing property in $TARGET_RUNTIME_PROPERTIES"
-# The sentinel proves grep itself ran: a failing sudo/ssh also exits 1, like grep's "no match".
-probe="grep -qxF $(q "$prop") $file; echo \"grep-rc=\$?\""
-probe_out=$(run_on tgt "$sudo_prefix sh -c $(printf '%q' "$probe")" || true)
-rc=$(printf '%s\n' "$probe_out" | sed -n 's/^grep-rc=\([0-9][0-9]*\)$/\1/p')
-[ "$(printf '%s\n' "$rc" | grep -c .)" = 1 ] || rc=unknown
-case "$rc" in 0|1) ;; *)
-  echo "Could not read $TARGET_RUNTIME_PROPERTIES on the target (grep status: $rc; file missing or unreadable, or sudo/ssh failed); not touching anything." >&2
-  exit 2 ;;
-esac
+rc=0; target_property_line "$prop" || rc=$?
+if [ "$rc" = 2 ]; then
+  echo "Could not read $TARGET_RUNTIME_PROPERTIES on the target (file missing or unreadable, or sudo/ssh failed); not touching anything." >&2
+  exit 2
+fi
 if [ "$rc" = 0 ]; then
   # GNU sed (the target is Linux); no .bak copy, the file holds passwords.
   tgt_cmd_write "$sudo_prefix sed -i '/^hibernate\\.search\\.indexing\\.listeners\\.enabled=false\$/d' $file"

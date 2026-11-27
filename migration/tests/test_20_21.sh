@@ -20,8 +20,31 @@ STUB
   rm -f "$WORKDIR/curl.argv" "$WORKDIR/curl.stdin" "$WORKDIR/curl.reply"
   export PATH="$WORKDIR/stub:$PATH"
 }
+# TARGET_SERVER_DIR is $WORKDIR in test.env: 20 needs the finished markers of 17 and 19 in $WORKDIR/logs.
 _env20() { _l20env "$@"; _stub_curl; _PWFILE
   rm -f "$WORKDIR/openmrs-runtime.properties" "$WORKDIR/tgt.restart" "$WORKDIR/up"; : > "$WORKDIR/up"
+  mkdir -p "$WORKDIR/logs"; : > "$WORKDIR/logs/import-patients.done"; : > "$WORKDIR/logs/verify.done"
+  export TMUX_TMPDIR="$WORKDIR"; trap 'tmux -S "$WORKDIR/tmux-$(id -u)/default" kill-server >/dev/null 2>&1 || true' EXIT
+}
+# I3: 20 must not restart the target or rebuild the index under a running import or verify, nor before both finished.
+_assert20_untouched() { assert_eq 1 "$(grep -c indexing "$WORKDIR/openmrs-runtime.properties")"; [ ! -e "$WORKDIR/tgt.restart" ] && [ ! -s "$WORKDIR/curl.stdin" ] || { echo "changed something"; exit 1; }; }
+test_rebuild_refuses_while_import_or_verify_runs() { command -v tmux >/dev/null || return 0
+  for s in import-users import-patients verify; do _env20
+    printf 'hibernate.search.indexing.listeners.enabled=false\n' > "$WORKDIR/openmrs-runtime.properties"
+    tmux new-session -d -s "$s" "sleep 30"
+    out=$(printf 'y\ny\ny\n' | ./20-rebuild-index.sh "$WORKDIR/l.env" 2>&1); assert_eq 1 $? "$out ($s)"
+    assert_contains "$out" "'$s'"; assert_not_contains "$out" "Proceed?"; _assert20_untouched
+    tmux kill-session -t "$s"
+  done
+}
+test_rebuild_refuses_before_import_and_verify_finished() {
+  for m in import-patients.done verify.done; do _env20
+    printf 'hibernate.search.indexing.listeners.enabled=false\n' > "$WORKDIR/openmrs-runtime.properties"
+    rm -f "$WORKDIR/logs/$m"
+    out=$(printf 'y\ny\ny\n' | ./20-rebuild-index.sh "$WORKDIR/l.env" 2>&1); assert_eq 1 $? "$out ($m)"
+    assert_contains "$out" "$m"; assert_not_contains "$out" "Proceed?"; _assert20_untouched
+  done
+  rm -f "$WORKDIR/logs/import-patients.done" "$WORKDIR/logs/verify.done"
 }
 
 test_indexing_line_removed() { _env20

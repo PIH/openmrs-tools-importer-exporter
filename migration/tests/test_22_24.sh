@@ -1,6 +1,7 @@
 # Tests for 22-open-target.sh, 23-shutdown-source.sh, 24-archive-and-clean.sh (7z is a stub on PATH).
 _l22env() { cp tests/fixtures/test.env "$WORKDIR/l.env"; local kv; for kv in "$@"; do echo "$kv" >> "$WORKDIR/l.env"; done; }
-_seed22() { testdb.sh sql tgt_db "delete from users; delete from person"
+# 22 reads TARGET_RUNTIME_PROPERTIES ($WORKDIR/openmrs-runtime.properties in test.env): without the indexing line by default.
+_seed22() { printf 'a=b\n' > "$WORKDIR/openmrs-runtime.properties"; testdb.sh sql tgt_db "delete from users; delete from person"
   testdb.sh sql tgt_db "insert into person(person_id,date_created,uuid,creator) values(1,now(),'u1',1),(2,now(),'u2',1),(3,now(),'u3',1),(4,now(),'u4',1);
     insert into users(user_id,system_id,username,person_id,date_created,creator,uuid,retired,retire_reason,retired_by,date_retired) values
     (11,'a','alice',1,now(),1,'x1',1,'Temp - migrating data',11,now()),
@@ -33,7 +34,7 @@ test_open_target_unretires_both_reasons_only() { _seed22; _l22env MIGRATION_MODE
   assert_contains "$out" "[43]"; assert_contains "$out" "[42]"; assert_contains "$out" "Next: 23-shutdown-source.sh"
 }
 test_open_target_zero_rows_skips_write() { _seed22; testdb.sh sql tgt_db "update users set retired=0 where retire_reason like 'Temp%' or retire_reason like 'Migrating%'"; _l22env
-  out=$(printf 'y\ny\ny\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
+  out=$(printf 'y\ny\ny\ny\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 0 $? "$out"
   assert_contains "$out" "0 users retired"; assert_not_contains "$out" "Proceed?"
   assert_contains "$out" "0 is expected in test mode"
 }
@@ -97,7 +98,7 @@ test_clean_refuses_root_server_dir() { _seed24
 test_open_target_banner_and_items() { _seed22; _l22env
   out=$(printf 'y\ny\nn\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 1 $? "$out"
   assert_contains "$out" "lets users log in to the TARGET (production in real mode)"
-  for w in "17 import finished" "18 files copied" "19 verify output reviewed" "20 index rebuilt" "21 spot checks done"; do assert_contains "$out" "$w"; done
+  for w in "16 password hashes copied after the last 15 run" "17 import finished" "18 files copied" "19 verify output reviewed" "20 index rebuilt" "21 spot checks done"; do assert_contains "$out" "$w"; done
   assert_eq "alice,bob,carol" "$(_retired22)"
 }
 test_open_target_flush_warning_before_confirm() { _seed22; _l22env
@@ -112,4 +113,20 @@ test_clean_refuses_when_archive_exists() { _seed24; _l22env
   : > "$WORKDIR/TestSource-exports-$(date +%Y%m%d).7z"
   out=$(printf 'y\ny\ny\ny\ny\ny\n' | ./24-archive-and-clean.sh "$WORKDIR/l.env" 2>&1); assert_eq 2 $? "$out"
   assert_contains "$out" "already exists"; [ -d "$WORKDIR/exports" ] && [ ! -e "$WORKDIR/7z.argv" ] || exit 1
+}
+# I4: the 16 question, and no opening while 07's indexing line is still in the runtime properties (20 not done).
+test_open_target_asks_about_password_hashes() { _seed22; _l22env
+  out=$(printf 'n\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 1 $? "$out"
+  assert_contains "$out" "16: have the password hashes been copied after the last 15 run?"
+  assert_eq "alice,bob,carol" "$(_retired22)"
+}
+test_open_target_refuses_while_indexing_line_present() { _seed22; _l22env
+  printf 'a=b\nhibernate.search.indexing.listeners.enabled=false\n' > "$WORKDIR/openmrs-runtime.properties"
+  out=$(printf 'y\ny\ny\ny\ny\ny\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 1 $? "$out"
+  assert_contains "$out" "hibernate.search.indexing.listeners.enabled=false"; assert_contains "$out" "20-rebuild-index.sh"
+  assert_not_contains "$out" "Proceed?"; assert_eq "alice,bob,carol" "$(_retired22)"
+}
+test_open_target_refuses_when_properties_unreadable() { _seed22; _l22env; rm -f "$WORKDIR/openmrs-runtime.properties"
+  out=$(printf 'y\ny\ny\ny\ny\ny\ny\ny\n' | ./22-open-target.sh "$WORKDIR/l.env" 2>&1); assert_eq 2 $? "$out"
+  assert_contains "$out" "$WORKDIR/openmrs-runtime.properties"; assert_eq "alice,bob,carol" "$(_retired22)"
 }

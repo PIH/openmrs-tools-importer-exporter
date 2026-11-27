@@ -151,3 +151,9 @@ test_import_patients_ended_early_offers_restart() { _skip_no_tmux && return 0; _
   assert_eq "docker: failed to start" "$(cat "$WORKDIR"/tsrv/logs/import-patients-console.2*.log)"
   assert_contains "$out" "tmux session 'import-patients'"
 }
+# I3: 17 does not start while the verification runs.
+test_import_patients_refuses_while_verify_runs() { _skip_no_tmux && return 0; _setup17
+  tmux new-session -d -s verify "sleep 30"
+  _run17 $'y\n'; assert_eq 1 $rc "$out"; assert_contains "$out" "'verify'"; assert_not_contains "$out" "Proceed?"
+  [ ! -e "$WORKDIR/docker.calls" ] || { echo "started"; exit 1; }
+}
