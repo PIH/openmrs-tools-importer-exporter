@@ -17,7 +17,7 @@ The migration is run by a person with these scripts. Nothing here needs any othe
 
 ### Laptop
 
-- `bash`, `ssh`, `git`. Linux or macOS. Nothing else is needed on the laptop (no node, no python3, no docker). The scripts run everything on the servers over SSH.
+- `bash`, `ssh`, `git`. Linux or macOS. Nothing else is needed on the laptop (no node, no python3, no docker). The scripts run everything on the servers over SSH. (Not so when the laptop is the target in a test: see "Laptop as target".)
 - An ssh host alias for each server in `~/.ssh/config`, so that `ssh <alias>` logs in without a password prompt. Use the aliases as `SOURCE_HOST` and `TARGET_HOST`. The scripts add `ServerAliveInterval=30` / `ServerAliveCountMax=6`, so long silent commands are not cut by idle timeouts and a dead connection fails within about 3 minutes.
 - Get this repo with git and run the scripts from `migration/`.
 
@@ -71,6 +71,8 @@ Tell the other scripts where it is, either way:
 **Real mode** is the actual migration. Both servers are locked, and the target is opened at step 22.
 
 **Laptop as target:** set `TARGET_HOST=local`. Commands for the target then run directly on the laptop instead of over SSH. Set `TARGET_DOCKER=docker` (no sudo), `TARGET_FILE_SUDO=` (empty) if you do not need sudo, and the container, restart command and wait URL for your local server (for example the SDK's `mysql-openmrs` and a command that restarts it). The copy steps then become `ssh <source> tar c | tar x` into the local folder. `SOURCE_HOST=local` works the same way.
+
+The laptop then needs everything the target needs: `docker`, `tmux`, `python3` and `7z`, a work folder for `TARGET_SERVER_DIR`, and a local OpenMRS whose MySQL runs in a docker container (for example the SDK's `mysql-openmrs`). 01 checks these on the laptop the same way it checks a server.
 
 ## Server-to-server SSH
 
