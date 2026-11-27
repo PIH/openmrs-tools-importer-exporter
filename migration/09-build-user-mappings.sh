@@ -90,10 +90,12 @@ merge_manual() {
   if [ -n "$bad" ]; then
     echo "$man: lines that are not '<source-uuid> <label>,<target-uuid>' (numbered without comments and blank lines): $bad" >&2; exit 2
   fi
-  dup=$(grep -vE '^[[:space:]]*(#|$)' "$man" | awk '{print $1}' | sort | uniq -d | tr '\n' ' ')
+  dup=$({ grep -vE '^[[:space:]]*(#|$)' "$man" || true; } | awk '{print $1}' | sort | uniq -d | tr '\n' ' ')
   if [ -n "$dup" ]; then echo "$man: source uuid(s) more than once: $dup" >&2; exit 2; fi
-  grep -vE '^[[:space:]]*(#|$)' "$man" | sed 's/[[:space:]]*$//' > "$gen.manual-lines"
-  awk 'NR == FNR { m[$1] = 1; next } !($1 in m)' "$gen.manual-lines" "$gen" > "$gen.merged"
+  # grep exits 1 when the file is empty or only comments; that is 0 manual lines, not an error.
+  { grep -vE '^[[:space:]]*(#|$)' "$man" || true; } | sed 's/[[:space:]]*$//' > "$gen.manual-lines"
+  # FILENAME, not NR == FNR: with an empty manual file NR == FNR would hold for every generated line.
+  awk -v man="$gen.manual-lines" 'FILENAME == man { m[$1] = 1; next } !($1 in m)' "$gen.manual-lines" "$gen" > "$gen.merged"
   cat "$gen.manual-lines" >> "$gen.merged"
   n=$(wc -l < "$gen.manual-lines" | tr -d ' ')
   mv "$gen.merged" "$gen"; rm -f "$gen.manual-lines"

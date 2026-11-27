@@ -220,3 +220,12 @@ test_no_manual_files_prints_zero() { _clear9
   _run9; assert_eq 0 $rc "$out"; assert_contains "$out" "manual lines applied from user_mappings.manual.csv: 0"
   [ ! -e "$WORKDIR/mappings/user_mappings.manual.csv" ] || { echo "09 created the manual file"; exit 1; }
 }
+test_manual_file_empty_or_comments_only_applies_zero() { _clear9
+  _add9 src_db 1 alice a@x.org 0; _add9 tgt_db 5 alice a@x.org 0
+  : > "$WORKDIR/mappings/user_mappings.manual.csv"
+  _manual9 provider_mappings.manual.csv "# nothing decided yet" ""
+  _run9; assert_eq 0 $rc "$out"
+  assert_contains "$out" "manual lines applied from user_mappings.manual.csv: 0"
+  assert_contains "$out" "manual lines applied from provider_mappings.manual.csv: 0"
+  assert_contains "$(_map user_mappings.csv)" "$(_uid 1 1) alice,$(_uid 1 5)"
+}
