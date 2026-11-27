@@ -78,7 +78,7 @@ The source and target servers cannot SSH to each other at the moment. So everyth
 
     ssh source '...' | ssh target '...'
 
-This applies to the export JSON (14), the user, provider and concept rows used for the mappings (09, 10), the password hashes (16) and the file zips (18). The laptop does not store these streams (only the mapping and list files in `WORKDIR`, see below).
+This applies to the export JSON (14), the user, provider and concept rows used for the mappings (09, 10), the password hashes (16), the file zips (18) and the source logs for the archive (24). The laptop does not store these streams (only the mapping and list files in `WORKDIR`, see below).
 
 This may change. It is to be researched with IT. If the servers can reach each other, these steps can be simplified (copy directly with `rsync` or `scp`, and no laptop in the middle). The helper is `pipe_src_to_tgt` in `lib.sh`, which has the same comment.
 
@@ -288,7 +288,7 @@ The scripts have tests in `migration/tests/`. They need docker: the tests use th
 
     migration/tests/testdb.sh up        # start the throwaway MySQL container
     migration/tests/run.sh              # run all tests
-    migration/tests/run.sh migration/tests/test_09_mappings.sh   # one file
+    migration/tests/run.sh tests/test_09_mappings.sh   # one file (path relative to migration/)
     migration/tests/testdb.sh down      # remove the container
 
 Output is one PASS or FAIL line per test and a total at the end. The tests do not run against real servers.

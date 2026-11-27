@@ -36,7 +36,7 @@ fi
 counts() { run_on "$1" "$(export_counts_cmd "$2/exports")"; }
 
 src_counts=$(counts src "$SOURCE_SERVER_DIR")
-if [ -z "$src_counts" ] || [ "$(printf '%s\n' "$src_counts" | awk '{ n += $NF } END { print n + 0 }')" -eq 0 ]; then
+if [ -z "$src_counts" ] || [ "$(printf '%s\n' "$src_counts" | awk '{ n += $(NF) } END { print n + 0 }')" -eq 0 ]; then
   echo "No exported files found in $SOURCE_SERVER_DIR/exports on the source server; run 13-export.sh first." >&2
   exit 1
 fi
