@@ -119,3 +119,10 @@ test_verify_refuses_while_import_runs() { _skip_no_tmux && return 0
     _cleanup19
   done
 }
+# m3: a failed complex obs check shows in the summary (and an absent complex-obs-missing CSV means it did not run).
+test_verify_shows_failed_complex_obs_check() { _skip_no_tmux && return 0; _setup19; _finished19
+  echo "Complex obs check failed: connect ECONNREFUSED" >> "$WORKDIR/tsrv/logs/verify-console.log"
+  _run19 $'n\n'; assert_eq 0 $rc "$out"
+  assert_contains "$out" "Complex obs check failed: connect ECONNREFUSED"
+  assert_contains "$out" "complex-obs-missing*.csv: absent"
+}

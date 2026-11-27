@@ -18,7 +18,7 @@ The migration is run by a person with these scripts. Nothing here needs any othe
 ### Laptop
 
 - `bash`, `ssh`, `git`. Linux or macOS. Nothing else is needed on the laptop (no node, no python3, no docker). The scripts run everything on the servers over SSH.
-- An ssh host alias for each server in `~/.ssh/config`, so that `ssh <alias>` logs in without a password prompt. Use the aliases as `SOURCE_HOST` and `TARGET_HOST`.
+- An ssh host alias for each server in `~/.ssh/config`, so that `ssh <alias>` logs in without a password prompt. Use the aliases as `SOURCE_HOST` and `TARGET_HOST`. The scripts add `ServerAliveInterval=30` / `ServerAliveCountMax=6`, so long silent commands are not cut by idle timeouts and a dead connection fails within about 3 minutes.
 - Get this repo with git and run the scripts from `migration/`.
 
 ### Servers (source and target)
@@ -102,7 +102,7 @@ Steps 00 to 02 can be run days earlier, and again on the day.
 
 ### On the day: lock both servers
 
-**03 `03-lock-source.sh`** Retires every source user except the migrating user, with the reason `Migrating from <SOURCE_NAME>`. Shows the counts before and after. [8] Skipped in test mode.
+**03 `03-lock-source.sh`** Retires every source user except the migrating user, with the reason `Migrating from <SOURCE_NAME>`. Shows the counts before and after; if any user is still not retired afterwards (for example one created during the update), it stops with exit 1: run it again. [8] Skipped in test mode.
 - Do by hand: disable 2FA for the migrating user on the source [6.1]. Disable the backups in cron on the source and on the target [7, 11] (one reminder for both; the wiki lists it twice).
 - Check: only the migrating user can still log in.
 
@@ -166,7 +166,7 @@ Source names the existing mappings file already maps are left out of the draft a
 ### Check
 
 **19 `19-verify.sh`** On the target, in tmux session `verify`: verifyPatients, verifyRelationships, verifyUsers, verifyComplexObs, then verifyUsers again for each entry of `EARLIER_IMPORTS`. [34, 37] A failing verifier does not stop the next. It refuses to start while `import-users` (15) or `import-patients` (17) is running. Run it again to see progress. Run it once more after it ended: it prints the table-count differences against the snapshot from 13 [35], the object counts before and after, and the row counts of the report CSVs (source-data-fixes, source-data-review, visits-before-birthdate, invalid-identifiers).
-- Check: read the numbers. The script prints, you judge: failed patients, table count changes, complex obs files that cannot be fetched, rows in the report files.
+- Check: read the numbers. The script prints, you judge: failed patients, table count changes, complex obs files that cannot be fetched, rows in the report files. verifyComplexObs always writes `complex-obs-missing.csv` (header only when nothing is missing), so `complex-obs-missing*.csv: absent` means it did not run; a `Complex obs check failed: ...` line in the summary means it ran and could not finish.
 
 **20 `20-rebuild-index.sh`** Removes the indexing line added by 07, restarts the target, waits, and rebuilds the search index with a synchronous call (asks for the migrating user's OpenMRS password). [36] It refuses, with nothing changed, while `import-users`, `import-patients` or `verify` is running on the target, and until 17 and 19 have finished (`logs/import-patients.done` and `logs/verify.done` in `TARGET_SERVER_DIR`).
 - Check: a patient search in the target UI finds a migrated patient.
@@ -228,7 +228,7 @@ Run 16 right after 15, and again after any later 15 pass that created more users
 | `mappings/concept_name_mappings.draft.csv`, `concept-names-no-candidate.csv`, `concept-mappings-voided-target.csv` | 10 | concept names and uuids, no personal data | 24 |
 | `lists/users.csv`, `providers.csv`, `patients.csv`, `relationships.csv` | 11 | uuids only; **patient data** (patient and relationship uuids) | 24 |
 | `counts/*.txt` (object counts, table counts) | 13, 19 | counts only | not deleted by 24; delete or protect by hand |
-| `target-users-before-import.txt` | 15 | uuids of target users, **user data** | not deleted by 24; delete or protect by hand |
+| `target-users-before-import.txt` | 15 | uuids of target users, **user data**. First line `# target=<host> db=<db> source=<SOURCE_NAME>`: 15 and 16 refuse a list made for another target or site | not deleted by 24; delete or protect by hand |
 
 Everything the scripts create (here and, for `TARGET_HOST=local`, on this machine) is readable by you only: `load_settings` sets `umask 077`. Password hashes are never written on the laptop. At the end, 24 prints a "Left on this laptop" list of the logs, counts, `target-users-before-import.txt` and the settings file. It deletes none of them.
 

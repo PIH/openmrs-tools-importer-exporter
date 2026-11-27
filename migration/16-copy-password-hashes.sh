@@ -14,16 +14,16 @@ source "$here/lib.sh"
 load_settings "${1:-}"
 step_header 16 "copy password hashes to the target"
 if [ "${SKIP_HASH_COPY_IN_TEST:-}" = true ]; then skip_in_test_mode "SKIP_HASH_COPY_IN_TEST=true"; fi
-require_settings SOURCE_MYSQL_CONTAINER SOURCE_DB TARGET_MYSQL_CONTAINER TARGET_DB
+require_settings SOURCE_MYSQL_CONTAINER SOURCE_DB TARGET_MYSQL_CONTAINER TARGET_DB SOURCE_NAME
 
 before="$WORKDIR/target-users-before-import.txt"
 if [ ! -f "$before" ]; then
   echo "$before not found: run 15-import-users.sh first (it saves the users that existed before the import)." >&2
   exit 1
 fi
-header="# target=$TARGET_HOST db=$TARGET_DB"
+header="# target=$TARGET_HOST db=$TARGET_DB source=$SOURCE_NAME"
 if [ "$(head -n 1 "$before")" != "$header" ]; then
-  echo "$before is missing its first line '$header' or belongs to another target (found: '$(head -n 1 "$before")'). Run 15-import-users.sh for this target." >&2
+  echo "$before is missing its first line '$header' or belongs to another target or site (found: '$(head -n 1 "$before")'). Run 15-import-users.sh for this target." >&2
   exit 2
 fi
 n_before=$(grep -c -v '^\(#\|$\)' "$before" || true)

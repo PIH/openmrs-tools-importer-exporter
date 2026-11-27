@@ -65,3 +65,11 @@ test_load_settings_sets_umask_077() {
   out=$(bash -c 'source lib.sh; load_settings tests/fixtures/test.env >/dev/null; umask; touch "$WORKDIR/umask-probe"' 2>&1); assert_contains "$out" "0077"
   assert_eq 600 "$(stat -c %a "$WORKDIR/umask-probe" 2>/dev/null || stat -f %Lp "$WORKDIR/umask-probe")"
 }
+# m1: ssh keeps the connection alive through long silent commands (and gives up on a dead one).
+test_run_on_ssh_keepalive_options() {
+  mkdir -p "$WORKDIR/sshstub"; printf '#!/bin/sh\necho "$@" >> "%s/ssh.argv"\n' "$WORKDIR" > "$WORKDIR/sshstub/ssh"; chmod +x "$WORKDIR/sshstub/ssh"; rm -f "$WORKDIR/ssh.argv"
+  PATH="$WORKDIR/sshstub:$PATH" SOURCE_HOST=srvalias run_on src 'echo hi'
+  PATH="$WORKDIR/sshstub:$PATH" TARGET_HOST=tgtalias run_on_tty tgt 'echo hi' </dev/null
+  assert_contains "$(head -n 1 "$WORKDIR/ssh.argv")" "-o ServerAliveInterval=30 -o ServerAliveCountMax=6 srvalias echo hi"
+  assert_contains "$(tail -n 1 "$WORKDIR/ssh.argv")" "-o ServerAliveInterval=30 -o ServerAliveCountMax=6 -t tgtalias echo hi"
+}

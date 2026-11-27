@@ -65,6 +65,10 @@ load_settings() {
   exec > >(tee -a "$WORKDIR/logs/${_SCRIPT_NAME}.$(date +%Y%m%d-%H%M%S).log") 2>&1
 }
 
+# ssh options for every connection: a keepalive every 30 s keeps long silent commands (index rebuild, big streams)
+# from being dropped by idle timeouts, and a dead connection is given up after 6 missed answers (3 minutes).
+_SSH_OPTS=(-o ServerAliveInterval=30 -o ServerAliveCountMax=6)
+
 # run_on src|tgt CMD: ssh to the host, or bash -c when the host is "local". stdin is passed through.
 run_on() {
   local side=$1 cmd=$2 host
@@ -73,7 +77,7 @@ run_on() {
     tgt) host=${TARGET_HOST:?TARGET_HOST not set} ;;
     *) echo "run_on: side must be src or tgt" >&2; return 2 ;;
   esac
-  if [ "$host" = local ]; then bash -c "$cmd"; else ssh "$host" "$cmd"; fi
+  if [ "$host" = local ]; then bash -c "$cmd"; else ssh "${_SSH_OPTS[@]}" "$host" "$cmd"; fi
 }
 
 # run_on_tty src|tgt CMD: like run_on, but with a terminal (ssh -t) so the command can prompt (e.g. 7z asking for a password).
@@ -85,7 +89,7 @@ run_on_tty() {
     tgt) host=${TARGET_HOST:?TARGET_HOST not set} ;;
     *) echo "run_on_tty: side must be src or tgt" >&2; return 2 ;;
   esac
-  if [ "$host" = local ]; then bash -c "$cmd"; else ssh -t "$host" "$cmd"; fi
+  if [ "$host" = local ]; then bash -c "$cmd"; else ssh "${_SSH_OPTS[@]}" -t "$host" "$cmd"; fi
 }
 
 # MYSQL_AUTH=prompt: ask once per side (sets a global, so call it without $(...)).
@@ -270,8 +274,10 @@ sql_quote() {
 
 # lock_users src|tgt REASON KEEP_USERNAME...: retires every non-retired user except the KEEP_USERNAMEs
 # (retired_by = the first one's user_id). 0 to retire: says so and writes nothing (safe to re-run).
+# Sets lock_left to the number of users still not retired after the update (0 when nothing had to be done).
 lock_users() {
   local side=$1 reason=$2 migrator=$3 keep="" name id n left sql
+  lock_left=0
   shift 2
   for name in "$@"; do keep="${keep:+$keep, }$(sql_quote "$name")"; done
   _lock_q() { if [ "$side" = src ]; then src_sql "$1"; else tgt_sql "$1"; fi; }
@@ -287,6 +293,7 @@ lock_users() {
     if [ "$side" = src ]; then src_sql_write "$sql"; else tgt_sql_write "$sql"; fi
     left=$(_lock_q "select count(*) from users where retired = 0 and ifnull(username, '') not in ($keep)")
     echo "$left users left that should be retired (expected 0)"
+    lock_left=$left
   fi
 }
 

@@ -93,6 +93,6 @@ q_exp=$(printf '%q' "$TARGET_SERVER_DIR/exports")
 q_pass1=$(printf '%q' "$TARGET_SERVER_DIR/patients-failed-pass1")
 retry_prep="{ mkdir -p $q_pass1; cp $q_exp/failed/*_patient.json $q_pass1/ 2>/dev/null; find $q_exp/failed -maxdepth 1 -name '*_patient.json' -exec mv -t $q_exp {} + 2>/dev/null; true; }"
 chain="$(node_cmd importProviders) && $(node_cmd importPatients) && $retry_prep && $(node_cmd importPatients) && $(node_cmd importRelationships)"
-start_in_tmux tgt import-patients work "mkdir -p $q_logs && rm -f $q_done && { $chain && touch $q_done; } 2>&1 | tee -a $q_console"
+start_in_tmux tgt import-patients cmd "mkdir -p $q_logs && rm -f $q_done && { $chain && touch $q_done; } 2>&1 | tee -a $q_console"
 
 echo "Started (it takes a long time; Ctrl-C is not needed, nothing waits). Run this script again to see progress, and once more after it ended."

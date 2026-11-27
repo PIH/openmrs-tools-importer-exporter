@@ -77,3 +77,11 @@ test_check_sessions_offers_restart() { rm -f "$WORKDIR/restart.marker"; _lenv MI
 test_check_sessions_restart_declined() { rm -f "$WORKDIR/restart.marker"; _lenv MIGRATION_MODE=real
   out=$(printf 'n\n' | ./08-check-no-sessions.sh "$WORKDIR/l.env" 2>&1); [ ! -e "$WORKDIR/restart.marker" ] || exit 1
 }
+# m2: 03 fails when users are still un-retired after the lock (here a trigger keeps one user active).
+test_lock_source_fails_when_users_remain() { _seed_users src_db; _lenv MIGRATION_MODE=real
+  local u; u=$(testdb.sh sql src_db "select username from users where username <> 'migrator' and retired = 0 limit 1")
+  testdb.sh sql src_db "create trigger hai1309_keep before update on users for each row set new.retired = if(new.username = '$u', 0, new.retired)"
+  out=$(printf 'y\n' | ./03-lock-source.sh "$WORKDIR/l.env" 2>&1); rc=$?
+  testdb.sh sql src_db "drop trigger hai1309_keep"
+  assert_eq 1 $rc "$out"; assert_contains "$out" "1 users left"; assert_not_contains "$out" "Next:"
+}

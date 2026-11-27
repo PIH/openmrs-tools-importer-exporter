@@ -48,7 +48,7 @@ _run15() { out=$(printf '%s' "$1" | ./15-import-users.sh "$WORKDIR/l.env" 2>&1);
 test_import_users_saves_uuid_list_and_runs_node() { _skip_no_tmux && return 0; _setup15
   touch "$WORKDIR/release"
   _run15 $'y\ny\n'; assert_eq 0 $rc "$out"
-  assert_eq "# target=local db=tgt_db" "$(head -n 1 "$WORKDIR/target-users-before-import.txt")"
+  assert_eq "# target=local db=tgt_db source=TestSource" "$(head -n 1 "$WORKDIR/target-users-before-import.txt")"
   assert_eq "$(printf '%s\n%s' "$(_h 1 1)" "$(_h 1 2)")" "$(tail -n +2 "$WORKDIR/target-users-before-import.txt" | sort)"
   assert_eq 3 "$(wc -l < "$WORKDIR/target-users-before-import.txt" | tr -d ' ')"
   assert_contains "$out" "tmux session 'import-users'"
@@ -61,7 +61,7 @@ test_import_users_saves_uuid_list_and_runs_node() { _skip_no_tmux && return 0; _
   assert_contains "$out" "Next: 16-copy-password-hashes.sh"; assert_contains "$out" "before anyone can log in"
 }
 test_import_users_keeps_existing_uuid_list() { _skip_no_tmux && return 0; _setup15
-  printf '# target=local db=tgt_db\nkeepme\n' > "$WORKDIR/target-users-before-import.txt"; touch "$WORKDIR/release"
+  printf '# target=local db=tgt_db source=TestSource\nkeepme\n' > "$WORKDIR/target-users-before-import.txt"; touch "$WORKDIR/release"
   _run15 $'y\ny\n'; assert_eq 0 $rc "$out"
   assert_eq keepme "$(tail -n 1 "$WORKDIR/target-users-before-import.txt")"
   assert_contains "$out" "Keeping the existing $WORKDIR/target-users-before-import.txt"
@@ -125,7 +125,7 @@ _seed16() { _clear16
   _user16 tgt_db 1 ann RANDOM-1 "$(_h 1 11)"; _user16 tgt_db 2 dan RANDOM-2 "$(_h 1 12)"
   _user16 tgt_db 3 bobt TARGETHASH-B "$(_h 1 23)"; _user16 tgt_db 4 daemon TARGETHASH-C "$(_h 1 14)"
   _user16 tgt_db 5 nopw RANDOM-5 "$(_h 1 15)"
-  printf '# target=local db=tgt_db\n%s\n\n%s\n' "$(_h 1 23)" "$(_h 1 14)" > "$WORKDIR/target-users-before-import.txt"
+  printf '# target=local db=tgt_db source=TestSource\n%s\n\n%s\n' "$(_h 1 23)" "$(_h 1 14)" > "$WORKDIR/target-users-before-import.txt"
   cp tests/fixtures/test.env "$WORKDIR/l.env"
   trap '_clear16' EXIT
 }
@@ -186,3 +186,14 @@ test_hash_copy_runs_in_real_mode_even_with_skip_setting() { _seed16
   _run16 $'y\n'; assert_eq 0 $rc "$out"
   assert_eq "HASHSEED-1/SALT-1" "$(_pwof "$(_h 1 11)")"
 }
+# m6: the before-import list belongs to one target AND one source: a list from another site is refused by 15 and 16.
+test_before_list_from_other_source_refused() { _seed16
+  printf '# target=local db=tgt_db source=OtherSite\n%s\n' "$(_h 1 23)" > "$WORKDIR/target-users-before-import.txt"
+  out=$(printf 'y\n' | ./16-copy-password-hashes.sh "$WORKDIR/l.env" 2>&1); assert_eq 2 $? "$out"; assert_contains "$out" "source=TestSource"
+  _skip_no_tmux && return 0; _setup15
+  printf '# target=local db=tgt_db source=OtherSite\nxx\n' > "$WORKDIR/target-users-before-import.txt"
+  _run15 $'y\ny\n'; assert_eq 2 $rc "$out"; assert_contains "$out" "source=OtherSite"; assert_not_contains "$out" "Proceed?"
+}
+# m5: importUsers writes the target database: started as kind "cmd".
+test_import_users_started_as_cmd_kind() { grep -q 'start_in_tmux tgt import-users cmd ' 15-import-users.sh || { echo "15 does not start importUsers as kind cmd"; exit 1; }
+  grep -q 'start_in_tmux tgt import-patients cmd ' 17-import-patients.sh || { echo "17 does not start the imports as kind cmd"; exit 1; }; }

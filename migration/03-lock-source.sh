@@ -11,6 +11,10 @@ skip_in_test_mode "the source is never written to in test mode"
 require_settings SOURCE_MYSQL_CONTAINER SOURCE_DB MIGRATING_USERNAME SOURCE_NAME
 
 lock_users src "Migrating from $SOURCE_NAME" "$MIGRATING_USERNAME"
+if [ "$lock_left" -gt 0 ]; then
+  echo "The source is NOT locked: $lock_left users are still not retired (for example created during the update). Run this script again." >&2
+  exit 1
+fi
 
 echo "Reminders (do these by hand):"
 echo "  - disable 2FA for $MIGRATING_USERNAME on the source [6.1]"

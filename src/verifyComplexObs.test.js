@@ -5,7 +5,7 @@ import http from 'node:http';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { collectComplexObsUuids, checkComplexObs } from './verifyComplexObs.js';
+import { collectComplexObsUuids, checkComplexObs, complexObsReport } from './verifyComplexObs.js';
 
 function tmpExports() {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cobs-'));
@@ -54,4 +54,9 @@ test('a request that throws counts as missing with status error', async () => {
   write(dir, 'successful', 'a_patient.json', { obs: [{ uuid: 'u1', valueComplex: 'a' }] });
   const r = await checkComplexObs({ exportsDir: dir, baseUrl: 'http://x', getStatus: async () => { throw new Error('boom'); }, concurrency: 10 });
   assert.deepEqual(r.missing, [{ uuid: 'u1', status: 'error' }]);
+});
+
+test('the report always has its header, so an absent file means the check did not run', () => {
+  assert.equal(complexObsReport([]), 'obs_uuid,http_status\n');
+  assert.equal(complexObsReport([{ uuid: 'u1', status: 404 }, { uuid: 'u,2', status: 'error' }]), 'obs_uuid,http_status\nu1,404\n"u,2",error\n');
 });

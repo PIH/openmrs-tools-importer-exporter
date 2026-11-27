@@ -1,6 +1,8 @@
 // Checks that every complex obs (an obs with a valueComplex) in the imported patient files has its file on the
 // target: GET <target>/ws/rest/v1/obs/<uuid>/value must answer 2xx. Run it after the complex_obs directory was copied.
-// Missing ones are listed in LOG_HOME/complex-obs-missing.csv (obs_uuid,http_status). Always exits 0: the operator decides.
+// Missing ones are listed in LOG_HOME/complex-obs-missing.csv (obs_uuid,http_status). The file is always written, with its
+// header even when nothing is missing, so an absent file means the check did not run. Always exits 0: the operator decides.
+// If the check itself fails it logs "Complex obs check failed: <message>" (19-verify.sh looks for both lines).
 // The core (collectComplexObsUuids, checkComplexObs) uses only node built-ins; the REST client and config are loaded by the CLI part.
 import fs from 'node:fs';
 import path from 'node:path';
@@ -47,20 +49,29 @@ export async function checkComplexObs({ exportsDir, baseUrl, getStatus, concurre
   return { checked: uuids.length, missing };
 }
 
+const csvField = value => {
+  const text = String(value ?? '');
+  return /[",\n\r]/.test(text) ? `"${text.replace(/"/g, '""')}"` : text;
+};
+
+/** The report file content: the header, then one obs_uuid,http_status line per missing obs. */
+export function complexObsReport(missing) {
+  return ['obs_uuid,http_status', ...missing.map(m => `${csvField(m.uuid)},${csvField(m.status)}`)].join('\n') + '\n';
+}
+
 async function main() {
   const { default: config } = await import('./utils/config.js');
   const { default: logger } = await import('./utils/logger.js');
   const { fetchStatus } = await import('./services/openmrsService.js');
-  const { appendCsvRows } = await import('./utils/csvLog.js');
   const { checked, missing } = await checkComplexObs({
     exportsDir: config.TARGET_DIR,
     baseUrl: config.OPENMRS_TARGET_CONTEXT_PATH,
     getStatus: url => fetchStatus(url, 'TARGET'),
     concurrency: 10,
   });
-  // The file is written from scratch so a re-run does not add to the earlier list
-  await fs.promises.rm(path.join(config.LOG_HOME, REPORT_FILE), { force: true });
-  await appendCsvRows(REPORT_FILE, ['obs_uuid', 'http_status'], missing.map(m => [m.uuid, m.status]));
+  // Written from scratch, so a re-run does not add to the earlier list; header only when nothing is missing
+  await fs.promises.mkdir(config.LOG_HOME, { recursive: true });
+  await fs.promises.writeFile(path.join(config.LOG_HOME, REPORT_FILE), complexObsReport(missing));
   logger.info(`Complex obs check: ${checked} checked, ${missing.length} missing`);
   process.exit(0);
 }

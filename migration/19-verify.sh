@@ -54,7 +54,7 @@ suffix_csvs() {
 
 report() {
   echo "--- Verifier results in the console log ---"
-  run_on tgt "echo \"patients verified OK: \$(grep -c 'verified successfully' $q_console 2>/dev/null)\"; echo \"patients with differences: \$(grep -c 'Verification failed for patient' $q_console 2>/dev/null)\"; grep -h 'Complex obs check:' $q_console 2>/dev/null; true"
+  run_on tgt "echo \"patients verified OK: \$(grep -c 'verified successfully' $q_console 2>/dev/null)\"; echo \"patients with differences: \$(grep -c 'Verification failed for patient' $q_console 2>/dev/null)\"; grep -h -e 'Complex obs check:' -e 'Complex obs check failed' $q_console 2>/dev/null; true"
   run_on tgt "n() { find $q_dir/exports/\$1 -maxdepth 1 -name '*_patient.json' 2>/dev/null | wc -l | tr -d ' '; }; echo \"verify: verified \$(n verified), failed verification \$(n failed_verification), not verified \$(n successful)\""
   mkdir -p "$counts"
   local f

@@ -13,7 +13,7 @@ here=$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)
 source "$here/lib.sh"
 load_settings "${1:-}"
 step_header 15 "import users on the target server"
-require_settings TARGET_SERVER_DIR NODE_IMAGE TARGET_DOCKER TARGET_DB TARGET_MYSQL_CONTAINER
+require_settings TARGET_SERVER_DIR NODE_IMAGE TARGET_DOCKER TARGET_DB TARGET_MYSQL_CONTAINER SOURCE_NAME
 
 q_dir=$(printf '%q' "$TARGET_SERVER_DIR")
 q_exports=$(printf '%q' "$TARGET_SERVER_DIR/exports")
@@ -47,12 +47,12 @@ done
 echo "Counts were already saved by step 13 in $counts (source-before.txt, target-before.txt, target-tables-before.txt)"
 
 # Users on the target before the first import: step 16 must not touch their passwords.
-# First line "# target=<host> db=<db>" says which target the list belongs to.
+# First line "# target=<host> db=<db> source=<SOURCE_NAME>" says which target and which site's import the list belongs to.
 before="$WORKDIR/target-users-before-import.txt"
-header="# target=$TARGET_HOST db=$TARGET_DB"
+header="# target=$TARGET_HOST db=$TARGET_DB source=$SOURCE_NAME"
 if [ -f "$before" ]; then
   if [ "$(head -n 1 "$before")" != "$header" ]; then
-    echo "$before is from another target (its first line is '$(head -n 1 "$before")', current settings say '$header')." >&2
+    echo "$before is from another target or site (its first line is '$(head -n 1 "$before")', current settings say '$header')." >&2
     echo "Move or delete it if it is stale, then run this script again." >&2
     exit 2
   fi
@@ -75,7 +75,7 @@ fi
 
 # $(id -u) and $(id -g) expand on the server (tmux runs the command there). The server dir is mounted at the same path so the host paths in the importer .env exist in the container.
 node_cmd="$TARGET_DOCKER run --rm --user \"\$(id -u):\$(id -g)\" -e HOME=/tmp --network host -v $q_dir:$q_dir -w $q_dir/repo/src $NODE_IMAGE node importUsers.js"
-start_in_tmux tgt import-users work "mkdir -p $q_logs && { $node_cmd; } 2>&1 | tee -a $q_console"
+start_in_tmux tgt import-users cmd "mkdir -p $q_logs && { $node_cmd; } 2>&1 | tee -a $q_console"
 
 echo "Started. Waiting for it to finish (Ctrl-C is safe: it keeps running, run this script again to see progress)."
 n=0
